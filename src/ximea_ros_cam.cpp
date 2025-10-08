@@ -433,11 +433,11 @@ void XimeaROSCam::initCam() {
 
     // Set compression parameters prior to declaring an image_transport
     // So the dynamic reconfigure initializes with these values
-    this->private_nh_.setParam("/image_raw/compressed/format",
+    this->private_nh_.setParam("image_raw/compressed/format",
                                this->cam_compressed_format_);
-    this->private_nh_.setParam("/image_raw/compressed/jpeg_quality",
+    this->private_nh_.setParam("image_raw/compressed/jpeg_quality",
                                this->cam_compressed_jpeg_quality_);
-    this->private_nh_.setParam("/image_raw/compressed/png_level",
+    this->private_nh_.setParam("image_raw/compressed/png_level",
                                this->cam_compressed_png_level_);
 
     // Setup image transport (publishing) and camera info topics
@@ -1086,5 +1086,4 @@ ros::Time XimeaROSCam::iterpolateTimestamp(const XI_IMG& frame){
 
 } // NAMESPACE ximea_ros_cam
 
-PLUGINLIB_EXPORT_CLASS( ximea_ros_cam::XimeaROSCam,
-                        nodelet::Nodelet);
+PLUGINLIB_EXPORT_CLASS(ximea_ros_cam::XimeaROSCam, nodelet::Nodelet);
