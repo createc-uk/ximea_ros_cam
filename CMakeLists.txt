@@ -51,7 +51,7 @@ include_directories(include
 
 ## Declare a C++ library
 add_library(${PROJECT_NAME} SHARED
-            src/ximea_ros_cam.cpp
+            src/ximea_camera.cpp
 )
 
 # Link the ament libraries
@@ -68,7 +68,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
 rosidl_target_interfaces(${PROJECT_NAME} ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 ## Declare a C++ executable
-add_executable(${PROJECT_NAME}_node src/ximea_ros_cam_node.cpp)
+add_executable(${PROJECT_NAME}_node src/ximea_camera_node.cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node

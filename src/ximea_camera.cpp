@@ -1,4 +1,4 @@
-#include "ximea_ros_cam/ximea_ros_cam.hpp"
+#include "ximea_camera/ximea_camera.hpp"
 
 namespace { // anon
     // in leu of std::clamp
@@ -18,7 +18,7 @@ namespace { // anon
     
 } // anon
 
-namespace ximea_ros_cam {
+namespace ximea_camera {
 
 std::map<std::string, int> XimeaROSCam::ImgFormatMap = {
     {"XI_MONO8",      XI_MONO8},
@@ -1053,7 +1053,7 @@ ros::Time XimeaROSCam::iterpolateTimestamp(const XI_IMG& frame){
 }
     
 
-} // NAMESPACE ximea_ros_cam
+} // NAMESPACE ximea_camera
 
 // Register the component with rclcpp
-RCLCPP_COMPONENTS_REGISTER_NODE(ximea_ros_cam::XimeaROSCam)
+RCLCPP_COMPONENTS_REGISTER_NODE(ximea_camera::XimeaROSCam)

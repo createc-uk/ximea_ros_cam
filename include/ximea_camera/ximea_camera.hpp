@@ -1,5 +1,5 @@
-#ifndef XIMEA_ROS_CAM_XIMEAROSCAM_HPP
-#define XIMEA_ROS_CAM_XIMEAROSCAM_HPP
+#ifndef XIMEA_CAMERA_XIMEA_CAMERA_HPP
+#define XIMEA_CAMERA_XIMEA_CAMERA_HPP
 
 //      ROS INCLUDES
 #include <rclcpp/rclcpp.hpp>
@@ -41,7 +41,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/core.hpp>
 
-namespace ximea_ros_cam {
+namespace ximea_camera {
 
 class XimeaROSCam : public rclcpp::Node {
  public:
@@ -220,6 +220,6 @@ class XimeaROSCam : public rclcpp::Node {
 
 };  // class XimeaROSCam
 
-}  // namespace ximea_ros_cam
+}  // namespace ximea_camera
 
-#endif  // XIMEA_ROS_CAM_XIMEAROSCAM_HPP
+#endif  // XIMEA_CAMERA_XIMEA_CAMERA_HPP
