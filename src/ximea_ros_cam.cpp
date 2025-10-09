@@ -287,58 +287,52 @@ void XimeaROSCam::initStorage() {
 }
 
 void XimeaROSCam::initCam() {
-    ROS_INFO("Loading Camera Configuration.");
+    RCLCPP_INFO(this->get_logger(), "Loading Camera Configuration.");
 
     // Assume that all of the config is embedded in the camera private namespace
     // Load all parameters and store them into their corresponding vars
 
     //      -- apply camera name --
-    this->private_nh_.param( "cam_name", this->cam_name_, std::string("INVALID"));
-    ROS_INFO_STREAM("cam_name: " << this->cam_name_);
+    this->cam_name_ = this->declare_parameter("cam_name", std::string("INVALID"));
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_name: " << this->cam_name_);
     //      -- apply camera specific parameters --
-    this->private_nh_.param( "serial_no", this->cam_serialno_, std::string());
-    ROS_INFO_STREAM("serial number: " << this->cam_serialno_);
-    this->private_nh_.param( "user_id", this->cam_user_id_, std::string());
-    ROS_INFO_STREAM("user id: " << this->cam_user_id_);
-    this->private_nh_.param( "frame_id", this->cam_frameid_, std::string("camera"));
-    ROS_INFO_STREAM("frame id: " << this->cam_frameid_);
-    this->private_nh_.param( "calib_file", this->cam_calib_file_, std::string("INVALID"));
-    ROS_INFO_STREAM("calibration file: " << this->cam_calib_file_);
-    this->private_nh_.param("poll_time", this->poll_time_, -1.0f);
-    ROS_INFO_STREAM("poll_time: " << this->poll_time_);
-    this->private_nh_.param("poll_time_frame", this->poll_time_frame_, 0.0f);
-    ROS_INFO_STREAM("poll_time_frame: " << this->poll_time_frame_);
+    this->cam_serialno_ = this->declare_parameter("serial_no", std::string());
+    RCLCPP_INFO_STREAM(this->get_logger(), "serial number: " << this->cam_serialno_);
+    this->cam_user_id_ = this->declare_parameter("user_id", std::string());
+    RCLCPP_INFO_STREAM(this->get_logger(), "user id: " << this->cam_user_id_);
+    this->cam_frameid_ = this->declare_parameter("frame_id", std::string("camera"));
+    RCLCPP_INFO_STREAM(this->get_logger(), "frame id: " << this->cam_frameid_);
+    this->cam_calib_file_ = this->declare_parameter("calib_file", std::string("INVALID"));
+    RCLCPP_INFO_STREAM(this->get_logger(), "calibration file: " << this->cam_calib_file_);
+    this->poll_time_ = this->declare_parameter("poll_time", -1.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "poll_time: " << this->poll_time_);
+    this->poll_time_frame_ = this->declare_parameter("poll_time_frame", 0.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "poll_time_frame: " << this->poll_time_frame_);
 
     // Diagnostics
-    this->private_nh_.param("enable_diagnostics", this->enable_diagnostics,
-        true);
-    ROS_INFO_STREAM("enable_diagnostics: " << this->enable_diagnostics);
-    this->private_nh_.param("pub_frequency", this->pub_frequency, 10.0);
-    ROS_INFO_STREAM("pub_frequency: " << this->pub_frequency);
-    this->private_nh_.param("pub_frequency_tolerance",
-        this->pub_frequency_tolerance, 0.3);
-    ROS_INFO_STREAM("pub_frequency_tolerance: " << this->pub_frequency_tolerance);
-    this->private_nh_.param("data_age_max", this->age_max, 0.1);
-    ROS_INFO_STREAM("data_age_max: " << this->age_max);
+    this->enable_diagnostics = this->declare_parameter("enable_diagnostics", true);
+    RCLCPP_INFO_STREAM(this->get_logger(), "enable_diagnostics: " << this->enable_diagnostics);
+    this->pub_frequency = this->declare_parameter("pub_frequency", 10.0);
+    RCLCPP_INFO_STREAM(this->get_logger(), "pub_frequency: " << this->pub_frequency);
+    this->pub_frequency_tolerance = this->declare_parameter("pub_frequency_tolerance", 0.3);
+    RCLCPP_INFO_STREAM(this->get_logger(), "pub_frequency_tolerance: " << this->pub_frequency_tolerance);
+    this->age_max = this->declare_parameter("data_age_max", 0.1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "data_age_max: " << this->age_max);
 
     //      -- apply compressed image parameters (from image_transport) --
-    this->private_nh_.param( "image_transport_compressed_format",
-        this->cam_compressed_format_, std::string("INVALID"));
-    ROS_INFO_STREAM("image_transport_compressed_format: "
+    this->cam_compressed_format_ = this->declare_parameter("image_transport_compressed_format", std::string("INVALID"));
+    RCLCPP_INFO_STREAM(this->get_logger(), "image_transport_compressed_format: "
         << this->cam_compressed_format_);
-    this->private_nh_.param( "image_transport_compressed_jpeg_quality",
-        this->cam_compressed_jpeg_quality_, -1);
-    ROS_INFO_STREAM("image_transport_compressed_jpeg_quality: "
+    this->cam_compressed_jpeg_quality_ = this->declare_parameter("image_transport_compressed_jpeg_quality", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "image_transport_compressed_jpeg_quality: "
         << this->cam_compressed_jpeg_quality_);
-    this->private_nh_.param( "image_transport_compressed_png_level",
-        this->cam_compressed_png_level_, -1);
-    ROS_INFO_STREAM("image_transport_compressed_png_level: "
+    this->cam_compressed_png_level_ = this->declare_parameter("image_transport_compressed_png_level", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "image_transport_compressed_png_level: "
         << this->cam_compressed_png_level_);
 
     //      -- apply image format parameters --
-    this->private_nh_.param( "format", this->cam_format_,
-        std::string("INVALID"));
-    ROS_INFO_STREAM("format: " << this->cam_format_);
+    this->cam_format_ = this->declare_parameter("format", std::string("INVALID"));
+    RCLCPP_INFO_STREAM(this->get_logger(), "format: " << this->cam_format_);
     this->cam_format_int_ = ImgFormatMap[this->cam_format_];
     ROS_INFO_STREAM("format_int: " << this->cam_format_int_);
     this->cam_bytesperpixel_ = BytesPerPixelMap[this->cam_format_];
@@ -347,87 +341,76 @@ void XimeaROSCam::initCam() {
     ROS_INFO_STREAM("cam_encoding_: " << this->cam_encoding_);
 
     //      -- apply bandwidth parameters --
-    this->private_nh_.param("num_cams_in_bus", this->cam_num_in_bus_, -1);
-    ROS_INFO_STREAM("cam_num_in_bus_: " << this->cam_num_in_bus_);
-    this->private_nh_.param("bw_safetyratio", this->cam_bw_safetyratio_, -1.0f);
-    ROS_INFO_STREAM("cam_bw_safetyratio_: " << this->cam_bw_safetyratio_);
+    this->cam_num_in_bus_ = this->declare_parameter("num_cams_in_bus", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_num_in_bus_: " << this->cam_num_in_bus_);
+    this->cam_bw_safetyratio_ = this->declare_parameter("bw_safetyratio", -1.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_bw_safetyratio_: " << this->cam_bw_safetyratio_);
 
     //      -- apply triggering parameters --
-    this->private_nh_.param("cam_trigger_mode", this->cam_trigger_mode_, -1);
-    ROS_INFO_STREAM("cam_trigger_mode_: " << this->cam_trigger_mode_);
-    this->private_nh_.param("hw_trigger_edge", this->cam_hw_trigger_edge_, -1);
-    ROS_INFO_STREAM("cam_hw_trigger_edge_: " << this->cam_hw_trigger_edge_);
+    this->cam_trigger_mode_ = this->declare_parameter("cam_trigger_mode", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_trigger_mode_: " << this->cam_trigger_mode_);
+    this->cam_hw_trigger_edge_ = this->declare_parameter("hw_trigger_edge", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_hw_trigger_edge_: " << this->cam_hw_trigger_edge_);
 
     //      -- apply framerate (software cap) parameters --
-    this->private_nh_.param( "frame_rate_control",
-        this->cam_framerate_control_, false);
-    ROS_INFO_STREAM("cam_framerate_control_: " << this->cam_framerate_control_);
-    this->private_nh_.param("frame_rate_set", this->cam_framerate_set_, -1);
-    ROS_INFO_STREAM("cam_framerate_set_: " << this->cam_framerate_set_);
-    this->private_nh_.param( "img_capture_timeout",
-        this->cam_img_cap_timeout_, -1);
-    ROS_INFO_STREAM("cam_img_cap_timeout_: " << this->cam_img_cap_timeout_);
+    this->cam_framerate_control_ = this->declare_parameter("frame_rate_control", false);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_framerate_control_: " << this->cam_framerate_control_);
+    this->cam_framerate_set_ = this->declare_parameter("frame_rate_set", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_framerate_set_: " << this->cam_framerate_set_);
+    this->cam_img_cap_timeout_ = this->declare_parameter("img_capture_timeout", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_img_cap_timeout_: " << this->cam_img_cap_timeout_);
 
     //      -- apply exposure parameters --
-    this->private_nh_.param("auto_exposure", this->cam_autoexposure_, false);
-    ROS_INFO_STREAM("cam_autoexposure_: " << this->cam_autoexposure_);
-    this->private_nh_.param("manual_gain", this->cam_manualgain_, -1.0f);
-    ROS_INFO_STREAM("cam_manualgain_: " << this->cam_manualgain_);
-    this->private_nh_.param("exposure_time", this->cam_exposure_time_, -1);
-    ROS_INFO_STREAM("cam_exposure_time_: " << this->cam_exposure_time_);
-    this->private_nh_.param( "auto_exposure_priority",
-        this->cam_autoexposure_priority_, -1.0f);
-    ROS_INFO_STREAM("cam_autoexposure_priority_: "
+    this->cam_autoexposure_ = this->declare_parameter("auto_exposure", false);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_autoexposure_: " << this->cam_autoexposure_);
+    this->cam_manualgain_ = this->declare_parameter("manual_gain", -1.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_manualgain_: " << this->cam_manualgain_);
+    this->cam_exposure_time_ = this->declare_parameter("exposure_time", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_exposure_time_: " << this->cam_exposure_time_);
+    this->cam_autoexposure_priority_ = this->declare_parameter("auto_exposure_priority", -1.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_autoexposure_priority_: "
         << this->cam_autoexposure_priority_);
-    this->private_nh_.param("auto_time_limit", this->cam_autotime_limit_, -1);
-    ROS_INFO_STREAM("cam_autotime_limit_: " << this->cam_autotime_limit_);
-    this->private_nh_.param( "auto_gain_limit",
-        this->cam_autogain_limit_, -1.0f);
-    ROS_INFO_STREAM("cam_autogain_limit_: " << this->cam_autogain_limit_);
+    this->cam_autotime_limit_ = this->declare_parameter("auto_time_limit", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_autotime_limit_: " << this->cam_autotime_limit_);
+    this->cam_autogain_limit_ = this->declare_parameter("auto_gain_limit", -1.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_autogain_limit_: " << this->cam_autogain_limit_);
 
     //      -- apply white balance parameters --
-    this->private_nh_.param( "white_balance_mode",
-        this->cam_white_balance_mode_, -1);
-    ROS_INFO_STREAM("cam_white_balance_mode_: "
+    this->cam_white_balance_mode_ = this->declare_parameter("white_balance_mode", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_white_balance_mode_: "
         << this->cam_white_balance_mode_);
-    this->private_nh_.param( "white_balance_coef_red",
-        this->cam_white_balance_coef_r_, -1.0f);
-    ROS_INFO_STREAM("cam_white_balance_coef_r_: "
+    this->cam_white_balance_coef_r_ = this->declare_parameter("white_balance_coef_red", -1.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_white_balance_coef_r_: "
         << this->cam_white_balance_coef_r_);
-    this->private_nh_.param( "white_balance_coef_green",
-        this->cam_white_balance_coef_g_, -1.0f);
-    ROS_INFO_STREAM("cam_white_balance_coef_g_: "
+    this->cam_white_balance_coef_g_ = this->declare_parameter("white_balance_coef_green", -1.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_white_balance_coef_g_: "
         << this->cam_white_balance_coef_g_);
-    this->private_nh_.param( "white_balance_coef_blue",
-        this->cam_white_balance_coef_b_, -1.0f);
-    ROS_INFO_STREAM("cam_white_balance_coef_b_: "
+    this->cam_white_balance_coef_b_ = this->declare_parameter("white_balance_coef_blue", -1.0f);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_white_balance_coef_b_: "
         << this->cam_white_balance_coef_b_);
 
     //      -- apply ROI parameters --
-    this->private_nh_.param("roi_left", this->cam_roi_left_, -1);
-    ROS_INFO_STREAM("cam_roi_left_: " << this->cam_roi_left_);
-    this->private_nh_.param("roi_top", this->cam_roi_top_, -1);
-    ROS_INFO_STREAM("cam_roi_top_: " << this->cam_roi_top_);
-    this->private_nh_.param("roi_width", this->cam_roi_width_, -1);
-    ROS_INFO_STREAM("cam_roi_width_: " << this->cam_roi_width_);
-    this->private_nh_.param("roi_height", this->cam_roi_height_, -1);
-    ROS_INFO_STREAM("cam_roi_height_: " << this->cam_roi_height_);
+    this->cam_roi_left_ = this->declare_parameter("roi_left", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_roi_left_: " << this->cam_roi_left_);
+    this->cam_roi_top_ = this->declare_parameter("roi_top", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_roi_top_: " << this->cam_roi_top_);
+    this->cam_roi_width_ = this->declare_parameter("roi_width", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_roi_width_: " << this->cam_roi_width_);
+    this->cam_roi_height_ = this->declare_parameter("roi_height", -1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_roi_height_: " << this->cam_roi_height_);
 
     // Other basic init values
     this->is_active_ = false;
     this->xi_h_ = NULL;
 
-    // Set compression parameters prior to declaring an image_transport
-    // So the dynamic reconfigure initializes with these values
-    this->private_nh_.setParam("image_raw/compressed/format",
-                               this->cam_compressed_format_);
-    this->private_nh_.setParam("image_raw/compressed/jpeg_quality",
-                               this->cam_compressed_jpeg_quality_);
-    this->private_nh_.setParam("image_raw/compressed/png_level",
-                               this->cam_compressed_png_level_);
+    // Set compression parameters for image_transport
+    // Note: In ROS2, these are typically handled by image_transport directly
+    // this->set_parameter(rclcpp::Parameter("image_raw/compressed/format", this->cam_compressed_format_));
+    // this->set_parameter(rclcpp::Parameter("image_raw/compressed/jpeg_quality", this->cam_compressed_jpeg_quality_));
+    // this->set_parameter(rclcpp::Parameter("image_raw/compressed/png_level", this->cam_compressed_png_level_));
 
     // Setup image transport (publishing) and camera info topics
-    image_transport::ImageTransport it(this->private_nh_);
+    image_transport::ImageTransport it(this->shared_from_this());
     this->cam_pub_ = it.advertise("image_raw", 1);
 
     // only load and publish calib file if it isn't empty
@@ -435,8 +418,8 @@ void XimeaROSCam::initCam() {
     // Setup camera info manager for calibration
     this->cam_info_loaded_ = false;
     this->cam_info_manager_ =
-        boost::make_shared<camera_info_manager::CameraInfoManager>
-                    (this->private_nh_, this->cam_name_);
+        std::make_shared<camera_info_manager::CameraInfoManager>(
+                    this->shared_from_this(), this->cam_name_);
     if (this->cam_info_manager_->loadCameraInfo(this->cam_calib_file_)) {
         this->cam_info_loaded_ = true;
     }
