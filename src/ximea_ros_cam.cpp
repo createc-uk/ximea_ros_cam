@@ -187,71 +187,68 @@ void XimeaROSCam::initDiagnostics() {
 // initPubs() - initialize the publishers
 void XimeaROSCam::initPubs() {
     // Report start of function
-    ROS_INFO("Loading Publishers ... ");
+    RCLCPP_INFO(this->get_logger(), "Loading Publishers ... ");
 
-    this->cam_img_counter_pub_ = this->private_nh_.advertise<std_msgs::UInt32>(
-            "image_count", 0);
+    this->cam_img_counter_pub_ = this->create_publisher<std_msgs::msg::UInt32>(
+            "image_count", 10);
 
-    this->private_nh_.param<bool>("publish_xi_image_info",
-                                 this->publish_xi_image_info_,
-                                 false);
-    ROS_INFO_STREAM("publish_xi_image_info: " << this->publish_xi_image_info_);
+    this->publish_xi_image_info_ = this->declare_parameter("publish_xi_image_info", false);
+    RCLCPP_INFO_STREAM(this->get_logger(), "publish_xi_image_info: " << this->publish_xi_image_info_);
 
     if(this->publish_xi_image_info_) {
       this->cam_xi_image_info_pub_ =
-        this->private_nh_.advertise<ximea_ros_cam::XiImageInfo>(
-          "xi_image_info", 0);
+        this->create_publisher<ximea_camera::msg::XiImageInfo>(
+          "xi_image_info", 10);
     }
 
     // Report end of function
-    ROS_INFO("... Publishers Loaded. ");
+    RCLCPP_INFO(this->get_logger(), "... Publishers Loaded. ");
 }
 
 // initTimers() - initialize the timers
 void XimeaROSCam::initTimers() {
     // Report start of function
-    ROS_INFO("Loading Timers ... ");
+    RCLCPP_INFO(this->get_logger(), "Loading Timers ... ");
 
     // Load camera polling callback timer ((Ensure that with multiple cameras,
     // each time is about 2 seconds spaced apart)
     this->xi_open_device_cb_ =
-        this->private_nh_.createTimer(ros::Duration(this->poll_time_),
-        boost::bind(&XimeaROSCam::openDeviceCb, this));
-    ROS_INFO_STREAM("xi_open_device_cb_: " << this->xi_open_device_cb_);
+        this->create_wall_timer(
+            std::chrono::duration<double>(this->poll_time_),
+            std::bind(&XimeaROSCam::openDeviceCb, this));
+    RCLCPP_INFO(this->get_logger(), "xi_open_device_cb_ created");
 
     // Load camera frame capture callback timer
     this->t_frame_cb_ =
-        this->public_nh_.createTimer(ros::Duration(this->poll_time_frame_),
-        boost::bind(&XimeaROSCam::frameCaptureCb, this));
-    ROS_INFO_STREAM("t_frame_cb_: " << this->t_frame_cb_);
+        this->create_wall_timer(
+            std::chrono::duration<double>(this->poll_time_frame_),
+            std::bind(&XimeaROSCam::frameCaptureCb, this));
+    RCLCPP_INFO(this->get_logger(), "t_frame_cb_ created");
 
     // Report end of function
-    ROS_INFO("... Timers Loaded.");
+    RCLCPP_INFO(this->get_logger(), "... Timers Loaded.");
 }
 
 void XimeaROSCam::initStorage() {
-    ROS_INFO("Loading Image Storage ... ");
+    RCLCPP_INFO(this->get_logger(), "Loading Image Storage ... ");
 
-    this->private_nh_.param<std::string>("image_directory",
-                                        this->image_directory_,
-                                        "NO_PATH");
-    ROS_INFO_STREAM("image_directory: " << this->image_directory_);
-    this->private_nh_.param<bool>("save_disk",
-                                 this->save_disk_,
-                                 false);
-    ROS_INFO_STREAM("save_disk: " << this->save_disk_);
-    this->private_nh_.param<bool>("calib_mode",
-                                 this->calib_mode_,
-                                 false);
-    ROS_INFO_STREAM("calib_mode_: " << this->calib_mode_);
+    this->image_directory_ = this->declare_parameter("image_directory", std::string("NO_PATH"));
+    RCLCPP_INFO_STREAM(this->get_logger(), "image_directory: " << this->image_directory_);
+    
+    this->save_disk_ = this->declare_parameter("save_disk", false);
+    RCLCPP_INFO_STREAM(this->get_logger(), "save_disk: " << this->save_disk_);
+    
+    this->calib_mode_ = this->declare_parameter("calib_mode", false);
+    RCLCPP_INFO_STREAM(this->get_logger(), "calib_mode_: " << this->calib_mode_);
 
 
     // Initialize directory paths
     boost::filesystem::path main_dir(this->image_directory_);
 
     if (this->calib_mode_) {
-        this->trigger_sub_ = this->public_nh_.subscribe( "camera/save_image",
-            1, &XimeaROSCam::triggerCb, this);
+        this->trigger_sub_ = this->create_subscription<std_msgs::msg::Empty>(
+            "camera/save_image", 10,
+            std::bind(&XimeaROSCam::triggerCb, this, std::placeholders::_1));
 
         // directory that holds calibration images
         boost::filesystem::path calib_dir = main_dir /
@@ -260,11 +257,11 @@ void XimeaROSCam::initStorage() {
         if (!boost::filesystem::create_directories(calib_dir))
         {
             // failed to create directory, exit ROS and explain.
-            ROS_INFO_STREAM("ERROR: unable to create directory: " << this->png_path_);
-            ROS_INFO_STREAM("Please make sure that the image_directory "
+            RCLCPP_ERROR_STREAM(this->get_logger(), "ERROR: unable to create directory: " << this->png_path_);
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Please make sure that the image_directory "
                          << "parameter is set to a folder with the proper "
                          << "permissions in the config file.");
-            ros::shutdown();
+            rclcpp::shutdown();
         }
 
         this->save_trigger_ = false;
@@ -278,15 +275,15 @@ void XimeaROSCam::initStorage() {
         if (!boost::filesystem::create_directories(img_stream_dir))
         {
             // failed to create directory, exit ROS and explain.
-            ROS_INFO_STREAM("ERROR: unable to create directory: " << this->bin_path_);
-            ROS_INFO_STREAM("Please make sure that the image_directory "
+            RCLCPP_ERROR_STREAM(this->get_logger(), "ERROR: unable to create directory: " << this->bin_path_);
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Please make sure that the image_directory "
                          << "parameter is set to a folder with the proper "
                          << "permissions in the config file.");
-            ros::shutdown();
+            rclcpp::shutdown();
         }
     }
 
-    ROS_INFO("Image Storage Loaded.");
+    RCLCPP_INFO(this->get_logger(), "Image Storage Loaded.");
 }
 
 void XimeaROSCam::initCam() {
@@ -447,8 +444,8 @@ void XimeaROSCam::initCam() {
     if (this->cam_info_loaded_) {
         // advertise
         this->cam_info_pub_ =
-            this->private_nh_.advertise<sensor_msgs::CameraInfo>(
-                "camera_info", 1);
+            this->create_publisher<sensor_msgs::msg::CameraInfo>(
+                "camera_info", 10);
     }
 
     // Enable auto bandwidth calculation to ensure bandwidth limiting and
@@ -623,21 +620,21 @@ void XimeaROSCam::frameCaptureCb() {
 
                 // Publish camera calibration info if camera info is loaded
                 if (this->cam_info_loaded_) {
-                    sensor_msgs::CameraInfo cam_info =
+                    sensor_msgs::msg::CameraInfo cam_info =
                         this->cam_info_manager_->getCameraInfo();
                         // reset frame id
                     cam_info.header.frame_id = this->cam_frameid_;
                     cam_info.header.stamp = timestamp;
-                    this->cam_info_pub_.publish(cam_info);
+                    this->cam_info_pub_->publish(cam_info);
                 }
 
                 // Publish image counter
                 // Note that header.seq does this, but it is depreciated and
                 // will be removed in ROS 2. Therefore here we did this instead.
-                std_msgs::UInt32 icount;
+                std_msgs::msg::UInt32 icount;
                 this->img_count_++;                 // increment
                 icount.data = this->img_count_;
-                this->cam_img_counter_pub_.publish(icount);
+                this->cam_img_counter_pub_->publish(icount);
             }
 
             // Compress and save images if triggered and in calibration mode
@@ -671,7 +668,7 @@ void XimeaROSCam::frameCaptureCb() {
 
         // If active, publish xiGetImage info to ROS message
         if(this->publish_xi_image_info_) {
-          ximea_ros_cam::XiImageInfo xiImageInfoMsg;
+          ximea_camera::msg::XiImageInfo xiImageInfoMsg;
           xiImageInfoMsg.header.frame_id = this->cam_frameid_;
           xiImageInfoMsg.header.stamp = timestamp;
           xiImageInfoMsg.size = xi_img.size;
@@ -692,7 +689,7 @@ void XimeaROSCam::frameCaptureCb() {
           xiImageInfoMsg.acq_nframe = xi_img.acq_nframe;
           xiImageInfoMsg.image_user_data = xi_img.image_user_data;
           // xiGetImageMsg.exposure_sub_times_us = (unsigned int) xi_img.exposure_sub_times_us;
-          this->cam_xi_image_info_pub_.publish(xiImageInfoMsg);
+          this->cam_xi_image_info_pub_->publish(xiImageInfoMsg);
         }
     }
 
@@ -750,7 +747,7 @@ std::string XimeaROSCam::formatTimeString
 }
 
 // Set save_trigger_ flag
-void XimeaROSCam::triggerCb(const std_msgs::Empty::ConstPtr& msg) {
+void XimeaROSCam::triggerCb(const std_msgs::msg::Empty::SharedPtr msg) {
     this->save_trigger_ = true;
 
     // To avoid warnings

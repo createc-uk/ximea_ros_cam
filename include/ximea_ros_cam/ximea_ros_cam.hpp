@@ -104,13 +104,13 @@ class XimeaROSCam : public rclcpp::Node {
     std::string cam_config_file_;    // camera config file
     // Camera variable list
     // Inactive variables
-    ros::Publisher cam_img_counter_pub_;     // Image counter
+    rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr cam_img_counter_pub_;     // Image counter
     uint32_t img_count_;                     // Image count
     bool cam_info_loaded_;                    // is camera info loaded?
-    boost::shared_ptr<camera_info_manager::CameraInfoManager>
+    std::shared_ptr<camera_info_manager::CameraInfoManager>
                         cam_info_manager_;   // Cam info manager handle
-    ros::Publisher cam_info_pub_;             // Cam info publisher handle
-    ros::Publisher cam_xi_image_info_pub_; // xiGetImage info publisher handle
+    rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_pub_;             // Cam info publisher handle
+    rclcpp::Publisher<ximea_camera::msg::XiImageInfo>::SharedPtr cam_xi_image_info_pub_; // xiGetImage info publisher handle
     // image_transport::ImageTransport cam_it_; // Image transport handle
     image_transport::Publisher cam_pub_;     // Image publisher handle
     // compressed image params
@@ -178,14 +178,14 @@ class XimeaROSCam : public rclcpp::Node {
     bool publish_xi_image_info_;     // publish xiGetImage handle?
 
     // Callback function for Camera Frame
-    ros::Timer xi_open_device_cb_;
+    rclcpp::TimerBase::SharedPtr xi_open_device_cb_;
     void openDeviceCb();
 
-    ros::Timer t_frame_cb_;
+    rclcpp::TimerBase::SharedPtr t_frame_cb_;
     void frameCaptureCb();
 
-    ros::Subscriber trigger_sub_;
-    void triggerCb(const std_msgs::Empty::ConstPtr& msg);
+    rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr trigger_sub_;
+    void triggerCb(const std_msgs::msg::Empty::SharedPtr msg);
     std::string formatTimeString(boost::posix_time::ptime timestamp);
     bool saveToDisk(char *img_buffer, int img_size, std::string filename);
     bool saveOnTrigger( char *img_buffer, int img_h, int img_w,
