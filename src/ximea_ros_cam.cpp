@@ -51,7 +51,8 @@ std::map<std::string, std::string> XimeaROSCam::ImgEncodingMap = {
 };
 
 
-XimeaROSCam::XimeaROSCam() : diag_updater{} {
+XimeaROSCam::XimeaROSCam(const rclcpp::NodeOptions& options) 
+    : rclcpp::Node("ximea_camera", options), diag_updater(this) {
     this->img_count_ = 0;                   // assume 0 images published
     this->cam_framerate_control_ = false;
     this->cam_white_balance_mode_ = 0;
@@ -60,13 +61,16 @@ XimeaROSCam::XimeaROSCam() : diag_updater{} {
     this->xi_h_ = NULL;
     this->cam_info_loaded_ = false;
     this->age_min = 0.0;
+    
+    // Initialize the camera
+    this->initialize();
 }
 
 XimeaROSCam::~XimeaROSCam() {
     // Init variables
     XI_RETURN xi_stat;
 
-    ROS_INFO("Shutting down ximea_ros_cam node...");
+    RCLCPP_INFO(this->get_logger(), "Shutting down ximea_camera node...");
     // Stop acquisition and close device if handle is available
     if (this->xi_h_ != NULL) {
         // Stop image acquisition
@@ -77,9 +81,9 @@ XimeaROSCam::~XimeaROSCam() {
         xiCloseDevice(this->xi_h_);
         this->xi_h_ = NULL;
 
-        ROS_INFO_STREAM("Closed device: " << this->cam_serialno_);
+        RCLCPP_INFO_STREAM(this->get_logger(), "Closed device: " << this->cam_serialno_);
     }
-    ROS_INFO("ximea_ros_cam node shutdown complete.");
+    RCLCPP_INFO(this->get_logger(), "ximea_camera node shutdown complete.");
 
     // To avoid warnings
     (void)xi_stat;
@@ -137,12 +141,9 @@ XI_RETURN XimeaROSCam::set(const char* prm, const std::string& value, bool suppr
 
 
 // onInit() - on the initialization of the nodelet (not the class)
-void XimeaROSCam::onInit() {
+void XimeaROSCam::initialize() {
     // Report start of function
-    ROS_INFO("Initializing Nodelet ... ");
-
-    // Execute initialization functions
-    this->initNodeHandles();
+    RCLCPP_INFO(this->get_logger(), "Initializing Camera Node ... ");
 
     // Camera initialization
     this->initCam();
@@ -160,22 +161,10 @@ void XimeaROSCam::onInit() {
     this->initStorage();
 
     // Report end of function
-    ROS_INFO("... Nodelet Initialized. Waiting for Input...");
+    RCLCPP_INFO(this->get_logger(), "... Camera Node Initialized. Waiting for Input...");
 }
 
 // initNodeHandles() - initialize the private/public node handles
-void XimeaROSCam::initNodeHandles() {
-    // Report start of function
-    ROS_INFO("Loading Node Handles ... ");
-
-    // get public/private node handle
-    this->public_nh_ = this->getNodeHandle();
-    this->private_nh_ = this->getPrivateNodeHandle();
-
-    // Report end of function
-    ROS_INFO("... Node Handles Loaded. ");
-}
-
 void XimeaROSCam::initDiagnostics() {
     if (this->enable_diagnostics) {
         this->frequency_min =
@@ -1086,4 +1075,5 @@ ros::Time XimeaROSCam::iterpolateTimestamp(const XI_IMG& frame){
 
 } // NAMESPACE ximea_ros_cam
 
-PLUGINLIB_EXPORT_CLASS(ximea_ros_cam::XimeaROSCam, nodelet::Nodelet);
+// Register the component with rclcpp
+RCLCPP_COMPONENTS_REGISTER_NODE(ximea_ros_cam::XimeaROSCam)

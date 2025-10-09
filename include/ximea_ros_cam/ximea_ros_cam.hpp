@@ -2,26 +2,25 @@
 #define XIMEA_ROS_CAM_XIMEAROSCAM_HPP
 
 //      ROS INCLUDES
-#include <ros/package.h>
-#include <ros/ros.h>
-#include <nodelet/nodelet.h>
-#include <pluginlib/class_list_macros.h>
-#include <diagnostic_updater/diagnostic_updater.h>
-#include <diagnostic_updater/publisher.h>
+#include <rclcpp/rclcpp.hpp>
+#include <rclcpp_components/register_node_macro.hpp>
+#include <diagnostic_updater/diagnostic_updater.hpp>
+#include <diagnostic_updater/publisher.hpp>
 
 //      XIMEA CAMERA INCLUDES
 #include <m3api/xiApi.h>
 
 //      CAMERA OUTPUT INCLUDES
-#include <image_transport/image_transport.h>
-#include <image_transport/publisher.h>
-#include <sensor_msgs/fill_image.h>
-#include <sensor_msgs/CameraInfo.h>
-#include <std_msgs/UInt8.h>
-#include <std_msgs/UInt32.h>
-#include <std_msgs/Empty.h>
-#include <camera_info_manager/camera_info_manager.h>
-#include <ximea_ros_cam/XiImageInfo.h>
+#include <image_transport/image_transport.hpp>
+#include <image_transport/publisher.hpp>
+#include <sensor_msgs/msg/image.hpp>
+#include <sensor_msgs/msg/camera_info.hpp>
+#include <sensor_msgs/msg/fill_image.hpp>
+#include <std_msgs/msg/uint8.hpp>
+#include <std_msgs/msg/uint32.hpp>
+#include <std_msgs/msg/empty.hpp>
+#include <camera_info_manager/camera_info_manager.hpp>
+#include <ximea_camera/msg/xi_image_info.hpp>
 
 //      OTHER INCLUDES
 #include <stdio.h>
@@ -44,31 +43,23 @@
 
 namespace ximea_ros_cam {
 
-class XimeaROSCam : public nodelet::Nodelet {
+class XimeaROSCam : public rclcpp::Node {
  public:
-    // Nodelet Constructor
-    XimeaROSCam();
+    // Node Constructor
+    explicit XimeaROSCam(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
-    // Nodelet Destructor
+    // Node Destructor
     ~XimeaROSCam();  // destructor
 
  private:
     /**
-     * @brief Initialization event for the ROS Nodelet
+     * @brief Initialize the camera node
      *
-     * Initialization event for the ROS Nodelet. It contains all of the
-     * init_ functions to define node handles, parameters, subscriptions,
-     * publishers, etc...
+     * Initialize the camera node. Contains all initialization functions
+     * to define parameters, subscriptions, publishers, etc...
      *
      */
-    virtual void onInit();
-
-    /**
-     * @brief  Initialize all node handles.
-     *
-     * Initialize all node handles. Includes public and private nodes.
-     */
-    void initNodeHandles();
+    void initialize();
 
     /**
      * @brief  Initialize diagnostics.
@@ -226,10 +217,6 @@ class XimeaROSCam : public nodelet::Nodelet {
     void sampleCameraTimestamp(void);
     ros::Time iterpolateTimestamp(const XI_IMG& frame);
     std::deque< std::pair<ros::Time,ros::Duration> > timestamp_queue_; 
-
-    // NODELET HANDLES
-    ros::NodeHandle public_nh_;
-    ros::NodeHandle private_nh_;
 
 };  // class XimeaROSCam
 
