@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5.1)
-project(ximea_ros_cam)
+project(ximea_camera)
 
 set(CMAKE_CXX_STANDARD 17)
 
