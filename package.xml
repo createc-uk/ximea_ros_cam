@@ -13,25 +13,21 @@
     <license>MIT</license>
 
     <!-- build tool information  -->
-    <buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>
-    <buildtool_depend condition="$ROS_VERSION == 2">ament_cmake_core</buildtool_depend>
+    <buildtool_depend>ament_cmake</buildtool_depend>
 
     <!-- depends -->
-    <depend condition="$ROS_VERSION == 1">roscpp</depend>
-    <depend>roslib</depend>
-    <depend>nodelet</depend>
+    <depend>rclcpp</depend>
+    <depend>rclcpp_components</depend>
     <depend>sensor_msgs</depend>
     <depend>image_transport</depend>
     <depend>camera_info_manager</depend>
     <depend>std_msgs</depend>
     <depend>libopencv-dev</depend>
-    <depend>message_generation</depend>
+    <depend>rosidl_default_generators</depend>
     <depend>diagnostic_updater</depend>
 
     <!-- The export tag contains other, unspecified, tags -->
     <export>
-      <build_type condition="$ROS_VERSION == 1">catkin</build_type>
-      <build_type condition="$ROS_VERSION == 2">ament_cmake</build_type>
-      <nodelet plugin="${prefix}/nodelets.xml"/>
+      <build_type>ament_cmake</build_type>
     </export>
 </package>

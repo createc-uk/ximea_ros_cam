@@ -7,35 +7,35 @@ set(CMAKE_CXX_STANDARD 17)
 set(XIMEA_INCLUDE_PATH /usr/include)
 set(XIMEA_LIBRARY m3api)
 
-## Find catkin macros and libraries
-set(catkin_deps
-    roscpp
-    roslib
-    nodelet
-    sensor_msgs
-    image_transport
-    camera_info_manager
-    std_msgs
-    message_generation
-    diagnostic_updater
-)
-
-find_package(catkin REQUIRED COMPONENTS ${catkin_deps})
+## Find ament and ROS2 packages
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_components REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(camera_info_manager REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(diagnostic_updater REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Boost REQUIRED)
 add_definitions(-DBOOST_BIND_GLOBAL_PLACEHOLDERS)
 
-# Declare ROS messages and services
-add_message_files(DIRECTORY msg FILES
-  XiImageInfo.msg)
+# Generate ROS2 messages
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/XiImageInfo.msg"
+  DEPENDENCIES std_msgs
+)
 
-# Generate messages
-generate_messages(DEPENDENCIES std_msgs)
-
-catkin_package(INCLUDE_DIRS   include
-               CATKIN_DEPENDS ${catkin_deps}
-               DEPENDS        Boost
-               LIBRARIES      ${PROJECT_NAME}
+# Set dependencies for ament
+set(dependencies
+  rclcpp
+  rclcpp_components
+  sensor_msgs
+  image_transport
+  camera_info_manager
+  std_msgs
+  diagnostic_updater
 )
 
 ###########
@@ -43,10 +43,8 @@ catkin_package(INCLUDE_DIRS   include
 ###########
 
 ## Specify additional locations of header files
-## Your package locations should be listed before other locations
 include_directories(include
     ${XIMEA_INCLUDE_PATH}
-    ${catkin_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIR}
     ${OpenCV_INCLUDE_DIRS}
 )
@@ -56,18 +54,18 @@ add_library(${PROJECT_NAME} SHARED
             src/ximea_ros_cam.cpp
 )
 
-# Link the catkin libraries
+# Link the ament libraries
 target_link_libraries(${PROJECT_NAME}
     ${XIMEA_LIBRARY}
-    ${catkin_LIBRARIES}
     ${Boost_LIBRARIES}
     ${OpenCV_LIBRARIES}
     yaml-cpp
 )
+ament_target_dependencies(${PROJECT_NAME} ${dependencies})
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
 
 ## Package depends on its generated messages
-add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}_generate_messages_cpp)
+rosidl_target_interfaces(${PROJECT_NAME} ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
 ## Declare a C++ executable
 add_executable(${PROJECT_NAME}_node src/ximea_ros_cam_node.cpp)
@@ -75,11 +73,11 @@ add_executable(${PROJECT_NAME}_node src/ximea_ros_cam_node.cpp)
 ## Specify libraries to link a library or executable target against
 target_link_libraries(${PROJECT_NAME}_node
     ${XIMEA_LIBRARY}
-    ${catkin_LIBRARIES}
     ${OpenCV_LIBRARIES}
     yaml-cpp
     ${PROJECT_NAME}
 )
+ament_target_dependencies(${PROJECT_NAME}_node ${dependencies})
 target_compile_options(${PROJECT_NAME}_node PRIVATE -Wall -Wextra)
 
 #############
@@ -91,33 +89,23 @@ target_compile_options(${PROJECT_NAME}_node PRIVATE -Wall -Wextra)
 
 ## Mark executables and/or libraries for installation
 install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_node
-    ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-    LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-    RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+    DESTINATION lib/${PROJECT_NAME}
 )
 
 ## Mark cpp header files for installation
-install(DIRECTORY include/${PROJECT_NAME}/
-    DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-    FILES_MATCHING PATTERN "*.hpp"
+install(DIRECTORY include/
+    DESTINATION include/${PROJECT_NAME}
 )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 install(DIRECTORY launch config
-    DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
-
-## Need to explicitly list nodelets.xml for installation
-install(FILES nodelets.xml
-    DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+    DESTINATION share/${PROJECT_NAME}/
 )
 
-# #############
-# ## Testing ##
-# #############
-#
-# ## Add gtest based cpp test target and link libraries
-# if (CATKIN_ENABLE_TESTING)
-#   file(GLOB TEST_FILES "test/*.cpp")
-#   catkin_add_gtest(${PROJECT_NAME}-test ${TEST_FILES})
-#   target_link_libraries(${PROJECT_NAME}-test ${catkin_LIBRARIES})
-# endif(CATKIN_ENABLE_TESTING)
+# Add ament package macro
+ament_export_include_directories(include)
+ament_export_libraries(${PROJECT_NAME})
+ament_export_dependencies(${dependencies})
+ament_package()
+
+
