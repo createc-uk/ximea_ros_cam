@@ -13,14 +13,14 @@
 //      CAMERA OUTPUT INCLUDES
 #include <image_transport/image_transport.hpp>
 #include <image_transport/publisher.hpp>
+#include <std_msgs/msg/u_int8.hpp>
+#include <std_msgs/msg/u_int32.hpp>
+#include <std_msgs/msg/empty.hpp>
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
-#include <sensor_msgs/msg/fill_image.hpp>
-#include <std_msgs/msg/uint8.hpp>
-#include <std_msgs/msg/uint32.hpp>
-#include <std_msgs/msg/empty.hpp>
+#include <sensor_msgs/fill_image.hpp>
 #include <camera_info_manager/camera_info_manager.hpp>
-#include <ximea_camera/msg/xi_image_info.hpp>
+#include <ximea_camera_interfaces/msg/xi_image_info.hpp>
 
 //      OTHER INCLUDES
 #include <stdio.h>

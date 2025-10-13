@@ -16,26 +16,29 @@ find_package(image_transport REQUIRED)
 find_package(camera_info_manager REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
-find_package(rosidl_default_generators REQUIRED)
+#find_package(rosidl_default_generators REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(Boost REQUIRED)
 add_definitions(-DBOOST_BIND_GLOBAL_PLACEHOLDERS)
+find_package(yaml-cpp REQUIRED)
+find_package(ximea_camera_interfaces REQUIRED)
 
-# Generate ROS2 messages
-rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/XiImageInfo.msg"
-  DEPENDENCIES std_msgs
-)
+# # Generate ROS2 messages
+# rosidl_generate_interfaces(${PROJECT_NAME}_msgs
+#   "msg/XiImageInfo.msg"
+#   DEPENDENCIES std_msgs
+# )
 
 # Set dependencies for ament
 set(dependencies
   rclcpp
   rclcpp_components
-  sensor_msgs
   image_transport
   camera_info_manager
-  std_msgs
   diagnostic_updater
+  std_msgs
+  sensor_msgs
+  ximea_camera_interfaces
 )
 
 ###########
@@ -50,8 +53,8 @@ include_directories(include
 )
 
 ## Declare a C++ library
-add_library(${PROJECT_NAME} SHARED
-            src/ximea_camera.cpp
+add_library(${PROJECT_NAME} STATIC
+    src/ximea_camera.cpp
 )
 
 # Link the ament libraries
@@ -65,19 +68,19 @@ ament_target_dependencies(${PROJECT_NAME} ${dependencies})
 target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
 
 ## Package depends on its generated messages
-rosidl_target_interfaces(${PROJECT_NAME} ${PROJECT_NAME} "rosidl_typesupport_cpp")
+#rosidl_target_interfaces(${PROJECT_NAME} ${PROJECT_NAME}_msgs "rosidl_typesupport_cpp")
 
 ## Declare a C++ executable
 add_executable(${PROJECT_NAME}_node src/ximea_camera_node.cpp)
 
 ## Specify libraries to link a library or executable target against
-target_link_libraries(${PROJECT_NAME}_node
-    ${XIMEA_LIBRARY}
-    ${OpenCV_LIBRARIES}
-    yaml-cpp
+target_link_libraries(${PROJECT_NAME}_node PUBLIC
+    # ${XIMEA_LIBRARY}
+    # ${OpenCV_LIBRARIES}
+    # yaml-cpp
     ${PROJECT_NAME}
 )
-ament_target_dependencies(${PROJECT_NAME}_node ${dependencies})
+#ament_target_dependencies(${PROJECT_NAME}_node ${dependencies})
 target_compile_options(${PROJECT_NAME}_node PRIVATE -Wall -Wextra)
 
 #############
@@ -107,5 +110,3 @@ ament_export_include_directories(include)
 ament_export_libraries(${PROJECT_NAME})
 ament_export_dependencies(${dependencies})
 ament_package()
-
-
