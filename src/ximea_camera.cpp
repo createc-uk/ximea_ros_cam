@@ -1,12 +1,11 @@
 #include "ximea_camera/ximea_camera.hpp"
 
+#include <filesystem>
+#include <vector>
+#include <sstream>
+#include <fstream>
+
 namespace { // anon
-    // in leu of std::clamp
-    template<typename T> 
-    T clamp(const T& v, const T& lo, const T& hi)
-    {
-        return std::min(std::max(v, lo), hi);
-    }
     int roundDown(int value, int increment)
     {
         return (value / increment) * increment;
@@ -92,7 +91,7 @@ XimeaROSCam::~XimeaROSCam() {
 XI_RETURN XimeaROSCam::get(const char* prm, int& value, bool suppress_warn){
     XI_RETURN xi_stat = xiGetParamInt(this->xi_h_, prm, &value);
     if(xi_stat != XI_OK && !suppress_warn)
-        ROS_WARN_STREAM("xiGetParamInt " << prm << " returned " << xi_stat);
+        RCLCPP_WARN_STREAM(this->get_logger(), "xiGetParamInt " << prm << " returned " << xi_stat);
     return xi_stat;
 }
 XI_RETURN XimeaROSCam::get(const char* prm, uint64_t& value, bool suppress_warn){
@@ -100,20 +99,20 @@ XI_RETURN XimeaROSCam::get(const char* prm, uint64_t& value, bool suppress_warn)
     XI_PRM_TYPE type = xiTypeInteger64;
     XI_RETURN xi_stat = xiGetParam(this->xi_h_, prm, &value, &size, &type);
     if(xi_stat != XI_OK && !suppress_warn)
-        ROS_WARN_STREAM("xiGetParam type xiTypeInteger64 " << prm << " returned " << xi_stat);
+        RCLCPP_WARN_STREAM(this->get_logger(), "xiGetParam type xiTypeInteger64 " << prm << " returned " << xi_stat);
     return xi_stat;
 }
 XI_RETURN XimeaROSCam::get(const char* prm, float& value, bool suppress_warn){
     XI_RETURN xi_stat = xiGetParamFloat(this->xi_h_, prm, &value);
     if(xi_stat != XI_OK && !suppress_warn)
-        ROS_WARN_STREAM("xiGetParamFloat " << prm << " returned " << xi_stat);
+        RCLCPP_WARN_STREAM(this->get_logger(), "xiGetParamFloat " << prm << " returned " << xi_stat);
     return xi_stat;
 }
 XI_RETURN XimeaROSCam::get(const char* prm, std::string& value, bool suppress_warn){
     char buf[256];
     XI_RETURN xi_stat = xiGetParamString(this->xi_h_, prm, buf, sizeof(buf));
     if(xi_stat != XI_OK && !suppress_warn)
-        ROS_WARN_STREAM("xiGetParamString " << prm << " returned " << xi_stat);
+        RCLCPP_WARN_STREAM(this->get_logger(), "xiGetParamString " << prm << " returned " << xi_stat);
     else
         value = std::string(buf);       
     return xi_stat;
@@ -122,20 +121,20 @@ XI_RETURN XimeaROSCam::get(const char* prm, std::string& value, bool suppress_wa
 XI_RETURN XimeaROSCam::set(const char* prm, int value, bool suppress_warn){
     XI_RETURN xi_stat = xiSetParamInt(this->xi_h_, prm, value);
     if(xi_stat != XI_OK && !suppress_warn)
-        ROS_WARN_STREAM("xiSetParamInt " << prm << " returned " << xi_stat);
+        RCLCPP_WARN_STREAM(this->get_logger(), "xiSetParamInt " << prm << " returned " << xi_stat);
     return xi_stat;
 }
 XI_RETURN XimeaROSCam::set(const char* prm, float value, bool suppress_warn){
     XI_RETURN xi_stat = xiSetParamFloat(this->xi_h_, prm, value);
     if(xi_stat != XI_OK && !suppress_warn)
-        ROS_WARN_STREAM("xiSetParamFloat " << prm << " returned " << xi_stat);
+        RCLCPP_WARN_STREAM(this->get_logger(), "xiSetParamFloat " << prm << " returned " << xi_stat);
     return xi_stat;
 }
 XI_RETURN XimeaROSCam::set(const char* prm, const std::string& value, bool suppress_warn){
     XI_RETURN xi_stat = xiSetParamString(this->xi_h_, prm, 
             const_cast<char*>(value.c_str()), value.size()); // cheeky const cast!
     if(xi_stat != XI_OK && !suppress_warn)
-        ROS_WARN_STREAM("xiSetParamString " << prm << " returned " << xi_stat);
+        RCLCPP_WARN_STREAM(this->get_logger(), "xiSetParamString " << prm << " returned " << xi_stat);
     return xi_stat;
 }
 
@@ -174,7 +173,7 @@ void XimeaROSCam::initDiagnostics() {
         this->diag_updater.setHardwareID(this->cam_name_);
         this->cam_pub_diag =
             std::make_shared<diagnostic_updater::TopicDiagnostic>(
-                ros::this_node::getNamespace() + "/image_raw",
+                std::string{this->get_namespace()} + "/image_raw",
                 this->diag_updater,
                 diagnostic_updater::FrequencyStatusParam(
                     &this->frequency_min, &this->frequency_max,
@@ -197,7 +196,7 @@ void XimeaROSCam::initPubs() {
 
     if(this->publish_xi_image_info_) {
       this->cam_xi_image_info_pub_ =
-        this->create_publisher<ximea_camera::msg::XiImageInfo>(
+        this->create_publisher<ximea_camera_interfaces::msg::XiImageInfo>(
           "xi_image_info", 10);
     }
 
@@ -243,7 +242,8 @@ void XimeaROSCam::initStorage() {
 
 
     // Initialize directory paths
-    boost::filesystem::path main_dir(this->image_directory_);
+    namespace fs = std::filesystem;
+    fs::path main_dir {this->image_directory_};
 
     if (this->calib_mode_) {
         this->trigger_sub_ = this->create_subscription<std_msgs::msg::Empty>(
@@ -251,10 +251,9 @@ void XimeaROSCam::initStorage() {
             std::bind(&XimeaROSCam::triggerCb, this, std::placeholders::_1));
 
         // directory that holds calibration images
-        boost::filesystem::path calib_dir = main_dir /
-                                            (this->cam_name_ + "/calib/");
+        fs::path calib_dir = main_dir / (this->cam_name_ + "/calib/");
         this->png_path_ = calib_dir.string();
-        if (!boost::filesystem::create_directories(calib_dir))
+        if (!fs::create_directories(calib_dir))
         {
             // failed to create directory, exit ROS and explain.
             RCLCPP_ERROR_STREAM(this->get_logger(), "ERROR: unable to create directory: " << this->png_path_);
@@ -269,10 +268,9 @@ void XimeaROSCam::initStorage() {
 
     // directory that holds video stream images
     if (this->save_disk_) {
-        boost::filesystem::path img_stream_dir = main_dir /
-                                                 (this->cam_name_ + "/stream/");
+        fs::path img_stream_dir = main_dir / (this->cam_name_ + "/stream/");
         this->bin_path_ = img_stream_dir.string();
-        if (!boost::filesystem::create_directories(img_stream_dir))
+        if (!fs::create_directories(img_stream_dir))
         {
             // failed to create directory, exit ROS and explain.
             RCLCPP_ERROR_STREAM(this->get_logger(), "ERROR: unable to create directory: " << this->bin_path_);
@@ -334,11 +332,11 @@ void XimeaROSCam::initCam() {
     this->cam_format_ = this->declare_parameter("format", std::string("INVALID"));
     RCLCPP_INFO_STREAM(this->get_logger(), "format: " << this->cam_format_);
     this->cam_format_int_ = ImgFormatMap[this->cam_format_];
-    ROS_INFO_STREAM("format_int: " << this->cam_format_int_);
+    RCLCPP_INFO_STREAM(this->get_logger(), "format_int: " << this->cam_format_int_);
     this->cam_bytesperpixel_ = BytesPerPixelMap[this->cam_format_];
-    ROS_INFO_STREAM("cam_bytesperpixel_: " << this->cam_bytesperpixel_);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_bytesperpixel_: " << this->cam_bytesperpixel_);
     this->cam_encoding_ = ImgEncodingMap[this->cam_format_];
-    ROS_INFO_STREAM("cam_encoding_: " << this->cam_encoding_);
+    RCLCPP_INFO_STREAM(this->get_logger(), "cam_encoding_: " << this->cam_encoding_);
 
     //      -- apply bandwidth parameters --
     this->cam_num_in_bus_ = this->declare_parameter("num_cams_in_bus", -1);
@@ -417,9 +415,14 @@ void XimeaROSCam::initCam() {
     // assume camera info is not loaded
     // Setup camera info manager for calibration
     this->cam_info_loaded_ = false;
-    this->cam_info_manager_ =
-        std::make_shared<camera_info_manager::CameraInfoManager>(
-                    this->shared_from_this(), this->cam_name_);
+
+    this->cam_info_manager_ = std::make_shared<camera_info_manager::CameraInfoManager>(
+                    this, this->cam_name_); // this constructor is deprecated in ROS2 rolling
+                    // this->get_node_base_interface(), 
+                    // this->get_node_services_interface(),
+                    // this->get_node_logging_interface(),
+                    // this->cam_name_, "", rclcpp::SystemDefaultsQoS(), "~"); // preferred rolling constructor
+
     if (this->cam_info_manager_->loadCameraInfo(this->cam_calib_file_)) {
         this->cam_info_loaded_ = true;
     }
@@ -449,7 +452,7 @@ void XimeaROSCam::openCam() {
 
     //      -- Set image format --
     if(set(XI_PRM_IMAGE_DATA_FORMAT, this->cam_format_int_))
-        ROS_WARN_STREAM("Failed to set image format.");
+        RCLCPP_WARN_STREAM(this->get_logger(), "Failed to set image format.");
 
     this->setWhiteBalance();
     this->setTrigger();
@@ -461,9 +464,9 @@ void XimeaROSCam::openCam() {
     // attempt to sample the camera clock  
     this->sampleCameraTimestamp();
     if(camera_timestamp_supported_)
-        ROS_INFO("Using camera timestamp.");
+        RCLCPP_INFO(this->get_logger(), "Using camera timestamp.");
     else
-        ROS_WARN("Camera timestamp not supported. Using time of arrival.");
+        RCLCPP_WARN(this->get_logger(), "Camera timestamp not supported. Using time of arrival.");
 
 
     //      -- Optimize transport buffer commit/size based on payload  --
@@ -481,11 +484,11 @@ void XimeaROSCam::openCam() {
     //      -- Start camera acquisition --      
     xi_stat = xiStartAcquisition(this->xi_h_);
     if(xi_stat != XI_OK) {
-        ROS_ERROR_STREAM("Failed to start acquisition. "
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to start acquisition. "
                 "xiStartAcquisition returned " << xi_stat);          
         this->is_active_ = false; 
     } else {
-        ROS_INFO("Starting Acquisition...");   
+        RCLCPP_INFO(this->get_logger(), "Starting Acquisition...");   
         this->is_active_ = true; 
     }
 }
@@ -497,21 +500,21 @@ void XimeaROSCam::openDeviceCb() {
 
     if(!this->cam_serialno_.empty()) 
     {
-        ROS_INFO_STREAM("Opening camera by serial number: " << this->cam_serialno_);
+        RCLCPP_INFO_STREAM(this->get_logger(), "Opening camera by serial number: " << this->cam_serialno_);
         xi_stat = xiOpenDeviceBy(XI_OPEN_BY_SN,
                 this->cam_serialno_.c_str(),
                 &this->xi_h_);
     }
     else if(!this->cam_user_id_.empty()) 
     {   // user id currenty supported on xiB, xiC, xiT & xiX
-        ROS_INFO_STREAM("Opening camera by user id: " << this->cam_user_id_);
+        RCLCPP_INFO_STREAM(this->get_logger(), "Opening camera by user id: " << this->cam_user_id_);
         xi_stat = xiOpenDeviceBy(XI_OPEN_BY_USER_ID,
                 this->cam_user_id_.c_str(),
                 &this->xi_h_);
     }
     else
     {
-        ROS_INFO_STREAM("No serial number or user id provided. Opening first camera on bus.");
+        RCLCPP_INFO_STREAM(this->get_logger(), "No serial number or user id provided. Opening first camera on bus.");
         xi_stat = xiOpenDevice(0, &this->xi_h_);
     }
     
@@ -521,9 +524,9 @@ void XimeaROSCam::openDeviceCb() {
             get(XI_PRM_DEVICE_SN, this->cam_serialno_);
         // if(this->user_id_.empty())  
         //     get(XI_PRM_DEVICE_USER_ID, this->user_id_);  
-        ROS_INFO_STREAM("Successfully opened camera. Serial number: "
+        RCLCPP_INFO_STREAM(this->get_logger(), "Successfully opened camera. Serial number: "
                         << this->cam_serialno_);
-        this->xi_open_device_cb_.stop();
+        this->xi_open_device_cb_->cancel(); // was using stop under ros1
 
         XimeaROSCam::openCam();
     }   
@@ -536,7 +539,7 @@ void XimeaROSCam::frameCaptureCb() {
     XI_IMG xi_img;
     char *img_buffer;
     int img_buf_size;
-    ros::Time timestamp;
+    rclcpp::Time timestamp;
     std::string time_str;
 
     xi_img.size = sizeof(XI_IMG);
@@ -554,7 +557,7 @@ void XimeaROSCam::frameCaptureCb() {
 
         // Was the image retrieval successful?
         if (xi_stat == XI_OK) {
-            ROS_INFO_STREAM_THROTTLE(3,
+            RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
                 "Capturing image from Ximea camera serial no: "
                 << this->cam_serialno_
                 << ". WxH: "
@@ -567,7 +570,7 @@ void XimeaROSCam::frameCaptureCb() {
                            * this->cam_bytesperpixel_;
 
             // Correctly format time as a string
-            time_str = this->formatTimeString(timestamp.toBoost());
+            time_str = this->formatTimeString(timestamp);
 
             // Save image as binary file
             if (this->save_disk_) {
@@ -575,15 +578,15 @@ void XimeaROSCam::frameCaptureCb() {
                                        this->cam_name_ + ".bin";
 
                 if (this->saveToDisk(img_buffer, img_buf_size, bin_path)) {
-                    ROS_INFO_STREAM("Saved image to: " << bin_path);
+                    RCLCPP_INFO_STREAM(this->get_logger(), "Saved image to: " << bin_path);
                 }
                 else {
-                    ROS_INFO_STREAM("Failed to save image: " << bin_path);
+                    RCLCPP_INFO_STREAM(this->get_logger(), "Failed to save image: " << bin_path);
                 }
             }
             // Publish as ROS message
             else {
-                sensor_msgs::Image img;
+                sensor_msgs::msg::Image img;
                 // Populate ROS message
                 sensor_msgs::fillImage(img,
                                        this->cam_encoding_,
@@ -598,7 +601,7 @@ void XimeaROSCam::frameCaptureCb() {
                 this->cam_pub_.publish(img);
                 if (this->enable_diagnostics) {
                     cam_pub_diag->tick(timestamp);
-                    diag_updater.update();
+                    //diag_updater.update(); // DISABLED WHILE UPGRADING TO ROS2
                 }
 
                 // Publish camera calibration info if camera info is loaded
@@ -624,7 +627,7 @@ void XimeaROSCam::frameCaptureCb() {
             if (this->save_trigger_ && this->calib_mode_) {
                 this->save_trigger_ = false;
 
-                time_str = this->formatTimeString(timestamp.toBoost());
+                time_str = this->formatTimeString(timestamp);
 
                 if (this->image_directory_ != std::string("NO_PATH")) {
                     std::string png_path = this->png_path_ + time_str + "_" +
@@ -634,14 +637,14 @@ void XimeaROSCam::frameCaptureCb() {
                                             xi_img.height,
                                             xi_img.width,
                                             png_path)) {
-                        ROS_INFO_STREAM("Saved image to: " << png_path);
+                        RCLCPP_INFO_STREAM(this->get_logger(), "Saved image to: " << png_path);
                     }
                     else {
-                        ROS_INFO_STREAM("Failed to save image: " << png_path);
+                        RCLCPP_INFO_STREAM(this->get_logger(), "Failed to save image: " << png_path);
                     }
                 }
                 else {
-                    ROS_INFO_STREAM("Directory path not set!");
+                    RCLCPP_INFO_STREAM(this->get_logger(), "Directory path not set!");
                 }
             }
         }
@@ -651,7 +654,7 @@ void XimeaROSCam::frameCaptureCb() {
 
         // If active, publish xiGetImage info to ROS message
         if(this->publish_xi_image_info_) {
-          ximea_camera::msg::XiImageInfo xiImageInfoMsg;
+          ximea_camera_interfaces::msg::XiImageInfo xiImageInfoMsg;
           xiImageInfoMsg.header.frame_id = this->cam_frameid_;
           xiImageInfoMsg.header.stamp = timestamp;
           xiImageInfoMsg.size = xi_img.size;
@@ -714,19 +717,24 @@ bool XimeaROSCam::saveOnTrigger(char *img_buffer,
 
 // Format ROS timestamp into desired string format
 // Format is YYYYMMDD_HHMMSS_uS
-std::string XimeaROSCam::formatTimeString
-        (boost::posix_time::ptime timestamp) {
-    boost::posix_time::time_facet *facet = new boost::posix_time::time_facet();
-    // Format is YYYYMMDD_HHMMSS_fractionalSeconds
-    facet->format("%Y%m%d_%H%M%S_%f");
+std::string XimeaROSCam::formatTimeString(rclcpp::Time timestamp) {
+// DISABLED WHILE UPGRADING TO ROS2
+    // boost::posix_time::time_facet *facet = new boost::posix_time::time_facet();
+    // // Format is YYYYMMDD_HHMMSS_fractionalSeconds
+    // facet->format("%Y%m%d_%H%M%S_%f");
 
-    std::stringstream stream;
-    stream.imbue(std::locale(std::locale::classic(), facet));
-    stream << timestamp;
+    // std::stringstream stream;
+    // stream.imbue(std::locale(std::locale::classic(), facet));
+    // stream << timestamp;
 
-    std::string formatted_time = stream.str();
-    boost::erase_all(formatted_time, "."); // remove decimal
-    return formatted_time;
+    // std::string formatted_time = stream.str();
+    // boost::erase_all(formatted_time, "."); // remove decimal
+
+    //return formatted_time;
+
+    std::stringstream ss;
+    ss << timestamp.nanoseconds();
+    return ss.str();
 }
 
 // Set save_trigger_ flag
@@ -747,9 +755,9 @@ void XimeaROSCam::setWhiteBalance(){
     if(this->cam_white_balance_mode_ == 2)
     {
         if(set(XI_PRM_AUTO_WB, 1)) 
-            ROS_ERROR_STREAM("Failed to enable auto white balance.");
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to enable auto white balance.");
         else    
-            ROS_INFO_STREAM("Auto white balance enabled.");
+            RCLCPP_INFO_STREAM(this->get_logger(), "Auto white balance enabled.");
            
     }
     else if(this->cam_white_balance_mode_ == 1)
@@ -758,18 +766,18 @@ void XimeaROSCam::setWhiteBalance(){
                 set(XI_PRM_WB_KR, this->cam_white_balance_coef_r_) |
                 set(XI_PRM_WB_KG, this->cam_white_balance_coef_g_) |
                 set(XI_PRM_WB_KB, this->cam_white_balance_coef_b_))
-            ROS_ERROR_STREAM("Failed to set white balance user coefficients.");
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set white balance user coefficients.");
         else    
-            ROS_INFO_STREAM("White balance set to use user coefficients.");
+            RCLCPP_INFO_STREAM(this->get_logger(), "White balance set to use user coefficients.");
     }
     else //if(this->cam_white_balance_mode_ == 0)
     {
         if(this->cam_white_balance_mode_ != 0)
-            ROS_WARN_STREAM("Unknown white balance mode. Defaulting to disabled.");
+            RCLCPP_WARN_STREAM(this->get_logger(), "Unknown white balance mode. Defaulting to disabled.");
         if(set(XI_PRM_AUTO_WB, 0)) 
-            ROS_ERROR_STREAM("Failed to disable white balance.");
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to disable white balance.");
         else    
-            ROS_INFO_STREAM("White balance disabled.");
+            RCLCPP_INFO_STREAM(this->get_logger(), "White balance disabled.");
     }
 }
 
@@ -782,23 +790,23 @@ void XimeaROSCam::setTrigger(){
         if(     set( XI_PRM_TRG_SOURCE, trigger_edge) | 
                 set(XI_PRM_GPI_SELECTOR, 1) |
                 set(XI_PRM_GPI_MODE, XI_GPI_TRIGGER))
-            ROS_ERROR_STREAM("Failed to set hardware trigger.");
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set hardware trigger.");
         else
-            ROS_INFO_STREAM("Hardware trigger enabled.");            
+            RCLCPP_INFO_STREAM(this->get_logger(), "Hardware trigger enabled.");            
     } 
     else if (this->cam_trigger_mode_ == 1) // software trigger
     { 
         if(set(XI_PRM_TRG_SOURCE, XI_TRG_SOFTWARE))
-            ROS_ERROR_STREAM("Failed to set software trigger."); 
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set software trigger."); 
         else    
-            ROS_WARN_STREAM("WARNING Software trigger enabled but not fully implemented."); 
+            RCLCPP_WARN_STREAM(this->get_logger(), "WARNING Software trigger enabled but not fully implemented."); 
     } 
     else // disable triggering  
     { 
         if(set( XI_PRM_TRG_SOURCE, XI_TRG_OFF))
-            ROS_ERROR_STREAM("Failed to disable triggering."); 
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to disable triggering."); 
         else    
-            ROS_INFO_STREAM("Triggering disabled."); 
+            RCLCPP_INFO_STREAM(this->get_logger(), "Triggering disabled."); 
     }    
 }
 void XimeaROSCam::setExposure(){
@@ -807,9 +815,9 @@ void XimeaROSCam::setExposure(){
                 set( XI_PRM_EXP_PRIORITY, this->cam_autoexposure_priority_) |
                 set( XI_PRM_AE_MAX_LIMIT, this->cam_autotime_limit_) |
                 set( XI_PRM_AG_MAX_LIMIT, this->cam_autogain_limit_))                
-            ROS_ERROR_STREAM("Failed to set exposure to auto.");                   
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set exposure to auto.");                   
         else
-            ROS_INFO_STREAM("Exposure set to auto." 
+            RCLCPP_INFO_STREAM(this->get_logger(), "Exposure set to auto." 
                     " Exposure priority: " << this->cam_autoexposure_priority_ << 
                     "  Max exposure: " << this->cam_autotime_limit_ << 
                     "  Max gain: " << this->cam_autogain_limit_); 
@@ -817,9 +825,9 @@ void XimeaROSCam::setExposure(){
         if(     set( XI_PRM_AEAG, 0) |
                 set( XI_PRM_EXPOSURE, this->cam_exposure_time_) |
                 set( XI_PRM_GAIN, this->cam_manualgain_))
-            ROS_ERROR_STREAM("Failed to set exposure to manual.");
+            RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set exposure to manual.");
         else
-            ROS_INFO_STREAM("Exposure set to manual." 
+            RCLCPP_INFO_STREAM(this->get_logger(), "Exposure set to manual." 
                     " Exposure: " << this->cam_exposure_time_ << 
                     "  Gain: " << this->cam_manualgain_); 
     }
@@ -855,14 +863,14 @@ void XimeaROSCam::setRegion(void){
             get(XI_PRM_HEIGHT XI_PRM_INFO_MAX, max_height) |
             get(XI_PRM_HEIGHT XI_PRM_INFO_INCREMENT, inc_height))
     {
-        ROS_WARN_STREAM("Failed to get one or more region of interest parameters");
+        RCLCPP_WARN_STREAM(this->get_logger(), "Failed to get one or more region of interest parameters");
     } 
     else  // clamp to region bounds setting any negative parameters to default values
     {   
-        x = clamp(roundDown((x<0? min_x:x), inc_x), min_x, max_x);
-        y =  clamp(roundDown((y<0? min_y:y), inc_y), min_y, max_y);
-        width = clamp(roundUp((width<0? max_width:width), inc_width), min_width, max_width - x);
-        height = clamp(roundUp((height<0? max_height:height), inc_height), min_height, max_height - y);
+        x = std::clamp(roundDown((x<0? min_x:x), inc_x), min_x, max_x);
+        y =  std::clamp(roundDown((y<0? min_y:y), inc_y), min_y, max_y);
+        width = std::clamp(roundUp((width<0? max_width:width), inc_width), min_width, max_width - x);
+        height = std::clamp(roundUp((height<0? max_height:height), inc_height), min_height, max_height - y);
     }
 
     // attempt to set 
@@ -873,7 +881,7 @@ void XimeaROSCam::setRegion(void){
             set( XI_PRM_OFFSET_X, x) |  
             set( XI_PRM_OFFSET_Y, y))          
     {
-        ROS_WARN_STREAM("Failed to set one or more region of interest parameters");
+        RCLCPP_WARN_STREAM(this->get_logger(), "Failed to set one or more region of interest parameters");
     }    
     // attempt to get 
     if(     get( XI_PRM_OFFSET_X, x) | // no short circuit! 
@@ -881,16 +889,16 @@ void XimeaROSCam::setRegion(void){
             get( XI_PRM_WIDTH, width) | 
             get( XI_PRM_HEIGHT, height))          
     {
-        ROS_WARN_STREAM("Failed to get one or more region of interest parameters");
+        RCLCPP_WARN_STREAM(this->get_logger(), "Failed to get one or more region of interest parameters");
     }   
-    ROS_INFO_STREAM("Camera region: {" << x << ", " << y << "} - {" << width << ", " << height << "}");   
+    RCLCPP_INFO_STREAM(this->get_logger(), "Camera region: {" << x << ", " << y << "} - {" << width << ", " << height << "}");   
 }
 
 void XimeaROSCam::setBandwidth(void){
     // Compute available bandwidth for this camera
     int available_bandwidth = 0;           // Mbits per second
     if(get(XI_PRM_AVAILABLE_BANDWIDTH, available_bandwidth)){
-        ROS_ERROR_STREAM("Available bandwidth not supported.");
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Available bandwidth not supported.");
         return;
     }
 
@@ -905,19 +913,20 @@ void XimeaROSCam::setBandwidth(void){
 
     // clamp to reported limits 
     int min_bandwidth=0, max_bandwidth=0;
-    if(     get( XI_PRM_LIMIT_BANDWIDTH XI_PRM_INFO_MIN, min_bandwidth) == XI_OK &&
-            get( XI_PRM_LIMIT_BANDWIDTH XI_PRM_INFO_MAX, max_bandwidth) == XI_OK){                
-        available_bandwidth = clamp(available_bandwidth, min_bandwidth, max_bandwidth);
+    if(get( XI_PRM_LIMIT_BANDWIDTH XI_PRM_INFO_MIN, min_bandwidth) == XI_OK &&
+                get( XI_PRM_LIMIT_BANDWIDTH XI_PRM_INFO_MAX, max_bandwidth) == XI_OK)
+    {                
+        available_bandwidth = std::clamp(available_bandwidth, min_bandwidth, max_bandwidth);
     }
 
     // Set bandwidth limit 
     if(set( XI_PRM_LIMIT_BANDWIDTH, available_bandwidth)){
-        ROS_ERROR_STREAM("Failed to limit bandwidth to " <<  
+        RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to limit bandwidth to " <<  
                 available_bandwidth << " Mbits/sec.");
     } else {        
         set( XI_PRM_LIMIT_BANDWIDTH_MODE, XI_ON, true); // not supported on MQ, MU, MD and MR models
         get( XI_PRM_LIMIT_BANDWIDTH, available_bandwidth ); // read back         
-        ROS_INFO_STREAM("Bandwidth limited to " << 
+        RCLCPP_INFO_STREAM(this->get_logger(), "Bandwidth limited to " << 
                 available_bandwidth << " Mbits/sec.");
     }
 }
@@ -928,7 +937,7 @@ void XimeaROSCam::setFramerate(void){
     float framerate = this->cam_framerate_set_; // as float
     if(     get( XI_PRM_FRAMERATE XI_PRM_INFO_MIN, this->min_fps_) == XI_OK ||
             get( XI_PRM_FRAMERATE XI_PRM_INFO_MAX, this->max_fps_) == XI_OK ) // max fps often returns as 0
-        ROS_INFO_STREAM("Reported framerate limits. Min: " << this->min_fps_ << "  Max: " << this->max_fps_ ); 
+        RCLCPP_INFO_STREAM(this->get_logger(), "Reported framerate limits. Min: " << this->min_fps_ << "  Max: " << this->max_fps_ ); 
 
     // If we are not in trigger mode, determine if we want to limit fps
     if (this->cam_trigger_mode_ == 0) {
@@ -939,20 +948,20 @@ void XimeaROSCam::setFramerate(void){
             // to cover for future models rather than check try both 
             if( set( XI_PRM_ACQ_TIMING_MODE, XI_ACQ_TIMING_MODE_FRAME_RATE_LIMIT, true)  && 
                     set( XI_PRM_ACQ_TIMING_MODE, XI_ACQ_TIMING_MODE_FRAME_RATE ) ) { 
-                ROS_ERROR_STREAM("Failed to set frame rate limit mode.");
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set frame rate limit mode.");
             } else if(set( XI_PRM_FRAMERATE, framerate )) {
-                ROS_ERROR_STREAM("Failed to set frame rate of " 
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set frame rate of " 
                         << framerate << "Hz.");
             } else {
                 get( XI_PRM_FRAMERATE, framerate );
-                ROS_INFO_STREAM("Frame rate set to "
+                RCLCPP_INFO_STREAM(this->get_logger(), "Frame rate set to "
                          << framerate << "Hz.");                           
             }
         } else { // default to free run
             if(set( XI_PRM_ACQ_TIMING_MODE, XI_ACQ_TIMING_MODE_FREE_RUN))
-                ROS_ERROR_STREAM("Failed to set frame rate to free run.");
+                RCLCPP_ERROR_STREAM(this->get_logger(), "Failed to set frame rate to free run.");
             else  
-                ROS_INFO_STREAM("Frame rate set to free run.");  
+                RCLCPP_INFO_STREAM(this->get_logger(), "Frame rate set to free run.");  
         }
     }
 
@@ -960,42 +969,41 @@ void XimeaROSCam::setFramerate(void){
 
 void XimeaROSCam::sampleCameraTimestamp(void){
     uint64_t nanoseconds;
-    ros::Time pre_stamp = ros::Time::now();
+    rclcpp::Time pre_stamp = this->get_clock()->now();
     camera_timestamp_supported_ = get(XI_PRM_TIMESTAMP, nanoseconds, true) == XI_OK;
-    ros::Time post_stamp = ros::Time::now();
+    rclcpp::Time post_stamp = this->get_clock()->now();
 
     if(!camera_timestamp_supported_)        
         return;       
 
-    const uint64_t billion = 1000000000; // c++11 has std::ratio, std::chrono and constexpr for this
-    timestamp_queue_.emplace_back(std::make_pair( pre_stamp, 
-            ros::Duration( nanoseconds/billion, nanoseconds%billion )));
+    
+    timestamp_queue_.emplace_back(std::make_pair( pre_stamp, std::chrono::nanoseconds(nanoseconds) ));
 
-    // ROS_INFO_STREAM("Timestamps:" << 
+    // RCLCPP_INFO_STREAM(this->get_logger(), "Timestamps:" << 
     //         " System: " << timestamp_queue_.back().first << 
     //         " Camera: " << timestamp_queue_.back().second );
 
     // monitor round trip speed
-    ros::Duration round_trip_duration(post_stamp - pre_stamp);
-    if(round_trip_duration > ros::Duration(0.0025)) // arbitary 2.5 ms 
-        ROS_WARN_STREAM_THROTTLE(3, "Camera timestamp query took " << 
-                round_trip_duration << " seconds." );    
+    rclcpp::Duration round_trip_duration(post_stamp - pre_stamp);
+    if(round_trip_duration > rclcpp::Duration(std::chrono::microseconds{2500})) // arbitary 2.5 ms 
+        RCLCPP_WARN_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+                "Camera timestamp query took " << round_trip_duration.seconds() << " seconds." );    
 }
 
-ros::Time XimeaROSCam::iterpolateTimestamp(const XI_IMG& frame){
+rclcpp::Time XimeaROSCam::iterpolateTimestamp(const XI_IMG& frame){
     if(!camera_timestamp_supported_)  
-        return ros::Time::now();
+        return this->get_clock()->now();
 
     sampleCameraTimestamp();
 
-    std::deque< std::pair<ros::Time,ros::Duration> >& queue = timestamp_queue_; // alias 
+    std::deque< std::pair<rclcpp::Time,rclcpp::Duration> >& queue = timestamp_queue_; // alias 
     if(queue.size() < 2)
     {  
-        ROS_ERROR("Not enough timestamp samples to interpolate.");
-        return ros::Time::now();
+        RCLCPP_ERROR(this->get_logger(),"Not enough timestamp samples to interpolate.");
+        return this->get_clock()->now();
     }
 
-    ros::Duration camera_stamp(frame.tsSec, frame.tsUSec * 1000);
+    rclcpp::Duration camera_stamp(frame.tsSec, frame.tsUSec * 1000);
     // TODO adjust camera stamp to be the start of exposure (model dependant)
     // consider using a precalculated bool to determin if exposure time should
     // be deducted  
@@ -1003,7 +1011,7 @@ ros::Time XimeaROSCam::iterpolateTimestamp(const XI_IMG& frame){
     bool clock_wrap = queue.front().second > queue.back().second; 
     if(clock_wrap)
     {
-        ROS_WARN("Clock wrap detected. Timestamp handling experimetal!");
+        RCLCPP_WARN(this->get_logger(),"Clock wrap detected. Timestamp handling experimetal!");
         // xiQ, xiD 
         // 40 bit microsecond number - (overlaps after 305 hours)
         // TimeStamp is recorded at the start of Data Readout 
@@ -1014,39 +1022,40 @@ ros::Time XimeaROSCam::iterpolateTimestamp(const XI_IMG& frame){
         // It is assumed that these cameras use the full tsSec value 
 
         // untested experimental handling!
-        ros::Duration wrap_period;
-        ros::Duration rough_wrap_period = 
+        rclcpp::Duration wrap_period{ std::chrono::nanoseconds{}};
+        rclcpp::Duration rough_wrap_period = 
                 (queue.front().second - queue.back().second) + 
                 (queue.back().first - queue.front().first);
 
         const uint64_t million = 1000000;
         const uint64_t forty_bits = uint64_t(1) << 40;
-        const ros::Duration forty_bit_period(forty_bits / million, forty_bits % million);
-        const ros::Duration ros_duration_period(1<<31,0); // ros duration overflow
+        const rclcpp::Duration forty_bit_period(forty_bits / million, forty_bits % million);
+        const rclcpp::Duration ros_duration_period(1<<31,0); // ros duration overflow
 
-        if((rough_wrap_period - forty_bit_period).sec == 0) 
+        if(std::fabs((rough_wrap_period - forty_bit_period).seconds()) < 1.0) 
             wrap_period = forty_bit_period; // ~305 hours
-        else if((rough_wrap_period - ros_duration_period).sec == 0)  
-            wrap_period = ros::Duration(1<<31,0); // ~68 years (worlds longest running camera)
+        else if(std::fabs((rough_wrap_period - ros_duration_period).seconds()) < 1.0)  
+            wrap_period = rclcpp::Duration(1<<31,0); // ~68 years (worlds longest running camera)
         else
             wrap_period = rough_wrap_period;
          
-        ROS_WARN_STREAM("Adjusting timestamps using a period of " << wrap_period);
-        using iterator = std::deque< std::pair<ros::Time,ros::Duration> >::iterator;
+        RCLCPP_WARN_STREAM(this->get_logger(), 
+                "Adjusting timestamps using a period of " << wrap_period.seconds() << " seconds." );
+        using iterator = std::deque< std::pair<rclcpp::Time,rclcpp::Duration> >::iterator;
         for(iterator it = queue.begin(); it != queue.end(); ++it)
             if(it->second > queue.back().second)
-                it->second -= wrap_period;
+                it->second = it->second - wrap_period;
         if(camera_stamp > queue.back().second)
-            camera_stamp -= wrap_period;    
+            camera_stamp = camera_stamp - wrap_period;    
     }    
 
     while(queue.size() > 2 && queue[1].second < camera_stamp)
         queue.pop_front();
 
     // interpolate stamp
-    double scalar = (camera_stamp - queue[0].second).toSec() /
-            (queue[1].second - queue[0].second).toSec();
-    ros::Time system_stamp = queue[0].first + 
+    double scalar = (camera_stamp - queue[0].second).seconds() /
+            (queue[1].second - queue[0].second).seconds();
+    rclcpp::Time system_stamp = queue[0].first + 
             (queue[1].first - queue[1].first) * scalar;
    
     return system_stamp;

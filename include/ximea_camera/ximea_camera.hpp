@@ -1,16 +1,10 @@
 #ifndef XIMEA_CAMERA_XIMEA_CAMERA_HPP
 #define XIMEA_CAMERA_XIMEA_CAMERA_HPP
 
-//      ROS INCLUDES
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 #include <diagnostic_updater/diagnostic_updater.hpp>
 #include <diagnostic_updater/publisher.hpp>
-
-//      XIMEA CAMERA INCLUDES
-#include <m3api/xiApi.h>
-
-//      CAMERA OUTPUT INCLUDES
 #include <image_transport/image_transport.hpp>
 #include <image_transport/publisher.hpp>
 #include <std_msgs/msg/u_int8.hpp>
@@ -22,24 +16,15 @@
 #include <camera_info_manager/camera_info_manager.hpp>
 #include <ximea_camera_interfaces/msg/xi_image_info.hpp>
 
-//      OTHER INCLUDES
-#include <stdio.h>
-#include <stdlib.h>
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <fstream>
-#include <vector>
-#include <deque>
-#include <map>
+#include <m3api/xiApi.h>
 #include <yaml-cpp/yaml.h>
-#include <sys/stat.h>
-#include <boost/make_shared.hpp>
-#include <boost/filesystem.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
-#include <boost/algorithm/string/replace.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/core.hpp>
+
+#include <string>
+#include <deque>
+#include <map>
+
 
 namespace ximea_camera {
 
@@ -107,10 +92,9 @@ class XimeaROSCam : public rclcpp::Node {
     rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr cam_img_counter_pub_;     // Image counter
     uint32_t img_count_;                     // Image count
     bool cam_info_loaded_;                    // is camera info loaded?
-    std::shared_ptr<camera_info_manager::CameraInfoManager>
-                        cam_info_manager_;   // Cam info manager handle
+    std::shared_ptr<camera_info_manager::CameraInfoManager> cam_info_manager_;   // Cam info manager handle
     rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_pub_;             // Cam info publisher handle
-    rclcpp::Publisher<ximea_camera::msg::XiImageInfo>::SharedPtr cam_xi_image_info_pub_; // xiGetImage info publisher handle
+    rclcpp::Publisher<ximea_camera_interfaces::msg::XiImageInfo>::SharedPtr cam_xi_image_info_pub_; // xiGetImage info publisher handle
     // image_transport::ImageTransport cam_it_; // Image transport handle
     image_transport::Publisher cam_pub_;     // Image publisher handle
     // compressed image params
@@ -186,7 +170,7 @@ class XimeaROSCam : public rclcpp::Node {
 
     rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr trigger_sub_;
     void triggerCb(const std_msgs::msg::Empty::SharedPtr msg);
-    std::string formatTimeString(boost::posix_time::ptime timestamp);
+    std::string formatTimeString(rclcpp::Time timestamp);
     bool saveToDisk(char *img_buffer, int img_size, std::string filename);
     bool saveOnTrigger( char *img_buffer, int img_h, int img_w,
         std::string filename);
@@ -215,8 +199,8 @@ class XimeaROSCam : public rclcpp::Node {
 
     bool camera_timestamp_supported_;
     void sampleCameraTimestamp(void);
-    ros::Time iterpolateTimestamp(const XI_IMG& frame);
-    std::deque< std::pair<ros::Time,ros::Duration> > timestamp_queue_; 
+    rclcpp::Time iterpolateTimestamp(const XI_IMG& frame);
+    std::deque< std::pair<rclcpp::Time,rclcpp::Duration> > timestamp_queue_; 
 
 };  // class XimeaROSCam
 
