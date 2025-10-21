@@ -28,15 +28,16 @@
 
 namespace ximea_camera {
 
-class XimeaROSCam : public rclcpp::Node {
- public:
+class XimeaROSCam : public rclcpp::Node // , std::enable_shared_from_this<XimeaROSCam>
+{
+public:
     // Node Constructor
     explicit XimeaROSCam(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
     // Node Destructor
     ~XimeaROSCam();  // destructor
 
- private:
+private:
     /**
      * @brief Initialize the camera node
      *
@@ -90,19 +91,19 @@ class XimeaROSCam : public rclcpp::Node {
     // Camera variable list
     // Inactive variables
     rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr cam_img_counter_pub_;     // Image counter
-    uint32_t img_count_;                     // Image count
-    bool cam_info_loaded_;                    // is camera info loaded?
+    uint32_t img_count_ = 0;                     // Image count
+    bool cam_info_loaded_ = false;                    // is camera info loaded?
     std::shared_ptr<camera_info_manager::CameraInfoManager> cam_info_manager_;   // Cam info manager handle
     rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr cam_info_pub_;             // Cam info publisher handle
     rclcpp::Publisher<ximea_camera_interfaces::msg::XiImageInfo>::SharedPtr cam_xi_image_info_pub_; // xiGetImage info publisher handle
     // image_transport::ImageTransport cam_it_; // Image transport handle
     image_transport::Publisher cam_pub_;     // Image publisher handle
     // compressed image params
-    std::string cam_compressed_format_;      // "png" (lossless) or "jpeg"
-    int cam_compressed_jpeg_quality_;        // 1-100 (1 = min quality)
-    int cam_compressed_png_level_;           // 1-9 (9 = max compression)
+    std::string cam_compressed_format_ = "png";      // "png" (lossless) or "jpeg"
+    int cam_compressed_jpeg_quality_ = 95;        // 1-100 (1 = min quality)
+    int cam_compressed_png_level_ = 9;           // 1-9 (9 = max compression)
     // camera
-    std::string cam_name_;                   // Main topic name for cam
+    std::string cam_name_ = "camera";        // Main topic name for cam
     std::string cam_format_;                 // Camera image format
     int cam_format_int_;                     // Camera image format int val
     std::string cam_encoding_;               // Camera image encoding
@@ -114,7 +115,7 @@ class XimeaROSCam : public rclcpp::Node {
     float poll_time_frame_;                  // For each image buffer check
     int cam_model_;
     std::string cam_calib_file_;
-    int cam_trigger_mode_;
+    int cam_trigger_mode_ = 0;
     int cam_hw_trigger_edge_;
     bool cam_autoexposure_;
     int cam_exposure_time_;
@@ -124,39 +125,39 @@ class XimeaROSCam : public rclcpp::Node {
     float cam_autogain_limit_;
     bool cam_binning_en_;
     int cam_downsample_factor_;
-    int cam_roi_left_;
-    int cam_roi_top_;
-    int cam_roi_width_;
-    int cam_roi_height_;
-    bool cam_framerate_control_;   // framerate control - enable or disable
-    int cam_framerate_set_;      // framerate control - setting fps
-    int cam_img_cap_timeout_;       // max time to wait for img
+    int cam_roi_left_ = 0;
+    int cam_roi_top_ = 0;
+    int cam_roi_width_ = 0;
+    int cam_roi_height_ = 0;
+    bool cam_framerate_control_ = false;   // framerate control - enable or disable
+    int cam_framerate_set_ = 0;      // framerate control - setting fps
+    int cam_img_cap_timeout_ = 0;       // max time to wait for img
     // white balance mode: 0 - none, 1 - use coeffs, 2 = auto
-    int cam_white_balance_mode_;
-    float cam_white_balance_coef_r_; // white balance coefficient (rgb)
-    float cam_white_balance_coef_g_;
-    float cam_white_balance_coef_b_;
+    int cam_white_balance_mode_ = 0;
+    float cam_white_balance_coef_r_ = 1.0; // white balance coefficient (rgb)
+    float cam_white_balance_coef_g_ = 1.0;
+    float cam_white_balance_coef_b_ = 1.0;
 
     // Diagnostics
-    bool enable_diagnostics;
-    diagnostic_updater::Updater diag_updater;
-    std::shared_ptr<diagnostic_updater::TopicDiagnostic> cam_pub_diag;
-    double pub_frequency_tolerance;
-    double pub_frequency;
-    double frequency_min;
-    double frequency_max;
-    double age_min;
-    double age_max;
+    bool enable_diagnostics_ = {};
+    std::shared_ptr<diagnostic_updater::Updater> diag_updater_;
+    std::shared_ptr<diagnostic_updater::TopicDiagnostic> cam_pub_diag_;
+    double pub_frequency_tolerance_ = {};
+    double pub_frequency_ = {};
+    double frequency_min_ = {};
+    double frequency_max_ = {};
+    double age_min_ = {};
+    double age_max_ = {};
 
     // Bandwidth Limiting
-    int cam_num_in_bus_;            // # cameras in a single bus
-    float cam_bw_safetyratio_;        // ratio used based on a camera avail bw
+    int cam_num_in_bus_ = 0;            // # cameras in a single bus
+    float cam_bw_safetyratio_ = 0.8;        // ratio used based on a camera avail bw
 
     // Active variables
-    bool is_active_;                // camera actively acquiring images?
-    HANDLE xi_h_;                   // camera xiAPI handle
-    float min_fps_;                 // camera calculated min fps
-    float max_fps_;                 // camera calculated max fps
+    bool is_active_ = false;                // camera actively acquiring images?
+    HANDLE xi_h_ = {};                   // camera xiAPI handle
+    float min_fps_ = {};                 // camera calculated min fps
+    float max_fps_ = {};                 // camera calculated max fps
 
     // Output Messages
     bool publish_xi_image_info_;     // publish xiGetImage handle?
@@ -172,8 +173,7 @@ class XimeaROSCam : public rclcpp::Node {
     void triggerCb(const std_msgs::msg::Empty::SharedPtr msg);
     std::string formatTimeString(rclcpp::Time timestamp);
     bool saveToDisk(char *img_buffer, int img_size, std::string filename);
-    bool saveOnTrigger( char *img_buffer, int img_h, int img_w,
-        std::string filename);
+    bool saveOnTrigger( char *img_buffer, int img_h, int img_w, std::string filename);
     bool save_trigger_;
     bool save_disk_;
     bool calib_mode_;

@@ -51,18 +51,12 @@ std::map<std::string, std::string> XimeaROSCam::ImgEncodingMap = {
 
 
 XimeaROSCam::XimeaROSCam(const rclcpp::NodeOptions& options) 
-    : rclcpp::Node("ximea_camera", options), diag_updater(this) {
-    this->img_count_ = 0;                   // assume 0 images published
-    this->cam_framerate_control_ = false;
-    this->cam_white_balance_mode_ = 0;
-    this->cam_trigger_mode_ = 0;
-    this->is_active_ = false;
-    this->xi_h_ = NULL;
-    this->cam_info_loaded_ = false;
-    this->age_min = 0.0;
-    
-    // Initialize the camera
-    this->initialize();
+        :rclcpp::Node("ximea_camera", options)
+{
+    // hijack the timer to delay initialising the class which requires shared_from_this()
+    xi_open_device_cb_ = create_wall_timer( std::chrono::seconds{0},
+            std::bind(&XimeaROSCam::initialize, this));
+    //this->initialize();
 }
 
 XimeaROSCam::~XimeaROSCam() {
@@ -164,22 +158,20 @@ void XimeaROSCam::initialize() {
 }
 
 // initNodeHandles() - initialize the private/public node handles
-void XimeaROSCam::initDiagnostics() {
-    if (this->enable_diagnostics) {
-        this->frequency_min =
-            this->pub_frequency - this->pub_frequency_tolerance;
-        this->frequency_max =
-            this->pub_frequency + this->pub_frequency_tolerance;
-        this->diag_updater.setHardwareID(this->cam_name_);
-        this->cam_pub_diag =
-            std::make_shared<diagnostic_updater::TopicDiagnostic>(
+void XimeaROSCam::initDiagnostics() 
+{
+    if (enable_diagnostics_) 
+    {
+        diag_updater_ = std::make_shared<diagnostic_updater::Updater>(this);
+        diag_updater_->setHardwareID(cam_name_);
+
+        frequency_min_ = pub_frequency_ - pub_frequency_tolerance_;
+        frequency_max_ = pub_frequency_ + pub_frequency_tolerance_;
+        cam_pub_diag_ = std::make_shared<diagnostic_updater::TopicDiagnostic>(
                 std::string{this->get_namespace()} + "/image_raw",
-                this->diag_updater,
-                diagnostic_updater::FrequencyStatusParam(
-                    &this->frequency_min, &this->frequency_max,
-                    0.0, 20),
-                diagnostic_updater::TimeStampStatusParam(
-                    this->age_min, this->age_max));
+                *diag_updater_,
+                diagnostic_updater::FrequencyStatusParam( &frequency_min_, &frequency_max_, 0.0, 20),
+                diagnostic_updater::TimeStampStatusParam( age_min_, age_max_));
     }
 }
 
@@ -308,14 +300,14 @@ void XimeaROSCam::initCam() {
     RCLCPP_INFO_STREAM(this->get_logger(), "poll_time_frame: " << this->poll_time_frame_);
 
     // Diagnostics
-    this->enable_diagnostics = this->declare_parameter("enable_diagnostics", true);
-    RCLCPP_INFO_STREAM(this->get_logger(), "enable_diagnostics: " << this->enable_diagnostics);
-    this->pub_frequency = this->declare_parameter("pub_frequency", 10.0);
-    RCLCPP_INFO_STREAM(this->get_logger(), "pub_frequency: " << this->pub_frequency);
-    this->pub_frequency_tolerance = this->declare_parameter("pub_frequency_tolerance", 0.3);
-    RCLCPP_INFO_STREAM(this->get_logger(), "pub_frequency_tolerance: " << this->pub_frequency_tolerance);
-    this->age_max = this->declare_parameter("data_age_max", 0.1);
-    RCLCPP_INFO_STREAM(this->get_logger(), "data_age_max: " << this->age_max);
+    this->enable_diagnostics_ = this->declare_parameter("enable_diagnostics", true);
+    RCLCPP_INFO_STREAM(this->get_logger(), "enable_diagnostics: " << this->enable_diagnostics_);
+    this->pub_frequency_ = this->declare_parameter("pub_frequency", 10.0);
+    RCLCPP_INFO_STREAM(this->get_logger(), "pub_frequency: " << this->pub_frequency_);
+    this->pub_frequency_tolerance_ = this->declare_parameter("pub_frequency_tolerance", 0.3);
+    RCLCPP_INFO_STREAM(this->get_logger(), "pub_frequency_tolerance: " << this->pub_frequency_tolerance_);
+    this->age_max_ = this->declare_parameter("data_age_max", 0.1);
+    RCLCPP_INFO_STREAM(this->get_logger(), "data_age_max: " << this->age_max_);
 
     //      -- apply compressed image parameters (from image_transport) --
     this->cam_compressed_format_ = this->declare_parameter("image_transport_compressed_format", std::string("INVALID"));
@@ -589,38 +581,37 @@ void XimeaROSCam::frameCaptureCb() {
                 sensor_msgs::msg::Image img;
                 // Populate ROS message
                 sensor_msgs::fillImage(img,
-                                       this->cam_encoding_,
+                                       cam_encoding_,
                                        xi_img.height,
                                        xi_img.width,
-                                       xi_img.width * this->cam_bytesperpixel_,
+                                       xi_img.width * cam_bytesperpixel_,
                                        img_buffer);
-                img.header.frame_id = this->cam_frameid_;
+                img.header.frame_id = cam_frameid_;
                 img.header.stamp = timestamp;
 
                 // Publish image
-                this->cam_pub_.publish(img);
-                if (this->enable_diagnostics) {
-                    cam_pub_diag->tick(timestamp);
+                cam_pub_.publish(img);
+                if (enable_diagnostics_) {
+                    cam_pub_diag_->tick(timestamp);
                     //diag_updater.update(); // DISABLED WHILE UPGRADING TO ROS2
                 }
 
                 // Publish camera calibration info if camera info is loaded
-                if (this->cam_info_loaded_) {
-                    sensor_msgs::msg::CameraInfo cam_info =
-                        this->cam_info_manager_->getCameraInfo();
+                if (cam_info_loaded_) {
+                    sensor_msgs::msg::CameraInfo cam_info = cam_info_manager_->getCameraInfo();
                         // reset frame id
-                    cam_info.header.frame_id = this->cam_frameid_;
+                    cam_info.header.frame_id = cam_frameid_;
                     cam_info.header.stamp = timestamp;
-                    this->cam_info_pub_->publish(cam_info);
+                    cam_info_pub_->publish(cam_info);
                 }
 
                 // Publish image counter
                 // Note that header.seq does this, but it is depreciated and
                 // will be removed in ROS 2. Therefore here we did this instead.
                 std_msgs::msg::UInt32 icount;
-                this->img_count_++;                 // increment
-                icount.data = this->img_count_;
-                this->cam_img_counter_pub_->publish(icount);
+                img_count_++;                 // increment
+                icount.data = img_count_;
+                cam_img_counter_pub_->publish(icount);
             }
 
             // Compress and save images if triggered and in calibration mode
@@ -654,28 +645,28 @@ void XimeaROSCam::frameCaptureCb() {
 
         // If active, publish xiGetImage info to ROS message
         if(this->publish_xi_image_info_) {
-          ximea_camera_interfaces::msg::XiImageInfo xiImageInfoMsg;
-          xiImageInfoMsg.header.frame_id = this->cam_frameid_;
-          xiImageInfoMsg.header.stamp = timestamp;
-          xiImageInfoMsg.size = xi_img.size;
-          xiImageInfoMsg.bp_size = xi_img.bp_size;
-          xiImageInfoMsg.frm = xi_img.frm;
-          xiImageInfoMsg.width = xi_img.width;
-          xiImageInfoMsg.height = xi_img.height;
-          xiImageInfoMsg.nframe = xi_img.nframe;
-          xiImageInfoMsg.ts_sec = xi_img.tsSec;
-          xiImageInfoMsg.ts_usec = xi_img.tsUSec;
-          xiImageInfoMsg.gpi_level = xi_img.GPI_level;
-          xiImageInfoMsg.black_level = xi_img.black_level;
-          xiImageInfoMsg.padding_x = xi_img.padding_x;
-          xiImageInfoMsg.absolute_offset_x = xi_img.AbsoluteOffsetX;
-          xiImageInfoMsg.absolute_offset_y = xi_img.AbsoluteOffsetY;
-          xiImageInfoMsg.exposure_time_us = xi_img.exposure_time_us;
-          xiImageInfoMsg.gain_db = xi_img.gain_db;
-          xiImageInfoMsg.acq_nframe = xi_img.acq_nframe;
-          xiImageInfoMsg.image_user_data = xi_img.image_user_data;
-          // xiGetImageMsg.exposure_sub_times_us = (unsigned int) xi_img.exposure_sub_times_us;
-          this->cam_xi_image_info_pub_->publish(xiImageInfoMsg);
+            ximea_camera_interfaces::msg::XiImageInfo xiImageInfoMsg;
+            xiImageInfoMsg.header.frame_id = this->cam_frameid_;
+            xiImageInfoMsg.header.stamp = timestamp;
+            xiImageInfoMsg.size = xi_img.size;
+            xiImageInfoMsg.bp_size = xi_img.bp_size;
+            xiImageInfoMsg.frm = xi_img.frm;
+            xiImageInfoMsg.width = xi_img.width;
+            xiImageInfoMsg.height = xi_img.height;
+            xiImageInfoMsg.nframe = xi_img.nframe;
+            xiImageInfoMsg.ts_sec = xi_img.tsSec;
+            xiImageInfoMsg.ts_usec = xi_img.tsUSec;
+            xiImageInfoMsg.gpi_level = xi_img.GPI_level;
+            xiImageInfoMsg.black_level = xi_img.black_level;
+            xiImageInfoMsg.padding_x = xi_img.padding_x;
+            xiImageInfoMsg.absolute_offset_x = xi_img.AbsoluteOffsetX;
+            xiImageInfoMsg.absolute_offset_y = xi_img.AbsoluteOffsetY;
+            xiImageInfoMsg.exposure_time_us = xi_img.exposure_time_us;
+            xiImageInfoMsg.gain_db = xi_img.gain_db;
+            xiImageInfoMsg.acq_nframe = xi_img.acq_nframe;
+            xiImageInfoMsg.image_user_data = xi_img.image_user_data;
+            // xiGetImageMsg.exposure_sub_times_us = (unsigned int) xi_img.exposure_sub_times_us;
+            this->cam_xi_image_info_pub_->publish(xiImageInfoMsg);
         }
     }
 
