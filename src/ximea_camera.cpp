@@ -1,9 +1,12 @@
 #include "ximea_camera/ximea_camera.hpp"
 
+#include <sensor_msgs/image_encodings.hpp>
+
 #include <filesystem>
 #include <vector>
 #include <sstream>
 #include <fstream>
+ 
 
 namespace { // anon
     int roundDown(int value, int increment)
@@ -19,35 +22,64 @@ namespace { // anon
 
 namespace ximea_camera {
 
-std::map<std::string, int> XimeaROSCam::ImgFormatMap = {
+
+std::map<std::string, int> XimeaROSCam::PixelFormatMap = {
     {"XI_MONO8",      XI_MONO8},
     {"XI_MONO16",     XI_MONO16},
     {"XI_RGB24",      XI_RGB24},
     {"XI_RGB32",      XI_RGB32},
-    {"XI_RGB_PLANAR", XI_RGB_PLANAR},
     {"XI_RAW8",       XI_RAW8},
     {"XI_RAW16",      XI_RAW16}
 };
 
-std::map<std::string, int> XimeaROSCam::BytesPerPixelMap = {
-    {"XI_MONO8",      1},
-    {"XI_MONO16",     2},
-    {"XI_RGB24",      3},
-    {"XI_RGB32",      4},
-    {"XI_RGB_PLANAR", 3},
-    {"XI_RAW8",       1},
-    {"XI_RAW16",      2}
-};
+std::string_view XimeaROSCam::getImageEncoding() 
+{
+    int colour_filter_array = -1;
+    get(XI_PRM_COLOR_FILTER_ARRAY, colour_filter_array);
 
-std::map<std::string, std::string> XimeaROSCam::ImgEncodingMap = {
-    {"XI_MONO8",      "mono8"},
-    {"XI_MONO16",     "mono16"},
-    {"XI_RGB24",      "bgr8"},
-    {"XI_RGB32",      "bgra8"},
-    {"XI_RGB_PLANAR", "not_applicable"},
-    {"XI_RAW8",       "mono8"},
-    {"XI_RAW16",      "mono16"}
-};
+    switch(this->pixel_format_)
+    {
+    case XI_MONO8:
+        return sensor_msgs::image_encodings::MONO8;
+    case XI_MONO16:
+        return sensor_msgs::image_encodings::MONO16;
+    case XI_RGB24:
+        return sensor_msgs::image_encodings::BGR8; // check this!
+    case XI_RGB32:
+        return sensor_msgs::image_encodings::BGRA8; // check this!
+    case XI_RAW8:
+        switch(colour_filter_array)
+        {
+        case XI_CFA_NONE:
+            return sensor_msgs::image_encodings::MONO8;
+        case XI_CFA_BAYER_RGGB:
+            return sensor_msgs::image_encodings::BAYER_RGGB8;
+        case XI_CFA_BAYER_BGGR:
+            return sensor_msgs::image_encodings::BAYER_BGGR8;
+        case XI_CFA_BAYER_GRBG:
+            return sensor_msgs::image_encodings::BAYER_GRBG8;
+        case XI_CFA_BAYER_GBRG:
+            return sensor_msgs::image_encodings::BAYER_GBRG8;
+        }
+        break;
+    case XI_RAW16:
+        switch(colour_filter_array)
+        {
+        case XI_CFA_NONE:
+            return sensor_msgs::image_encodings::MONO16;
+        case XI_CFA_BAYER_RGGB:
+            return sensor_msgs::image_encodings::BAYER_RGGB16;
+        case XI_CFA_BAYER_BGGR:
+            return sensor_msgs::image_encodings::BAYER_BGGR16;
+        case XI_CFA_BAYER_GRBG:
+            return sensor_msgs::image_encodings::BAYER_GRBG16;
+        case XI_CFA_BAYER_GBRG:
+            return sensor_msgs::image_encodings::BAYER_GBRG16;
+        }
+        break;
+    }
+    return ""; // unknown
+}
 
 
 XimeaROSCam::XimeaROSCam(const rclcpp::NodeOptions& options) 
@@ -56,7 +88,6 @@ XimeaROSCam::XimeaROSCam(const rclcpp::NodeOptions& options)
     // hijack the timer to delay initialising the class which requires shared_from_this()
     xi_open_device_cb_ = create_wall_timer( std::chrono::seconds{0},
             std::bind(&XimeaROSCam::initialize, this));
-    //this->initialize();
 }
 
 XimeaROSCam::~XimeaROSCam() {
@@ -226,9 +257,6 @@ void XimeaROSCam::initStorage() {
     this->image_directory_ = this->declare_parameter("image_directory", std::string("NO_PATH"));
     RCLCPP_INFO_STREAM(this->get_logger(), "image_directory: " << this->image_directory_);
     
-    this->save_disk_ = this->declare_parameter("save_disk", false);
-    RCLCPP_INFO_STREAM(this->get_logger(), "save_disk: " << this->save_disk_);
-    
     this->calib_mode_ = this->declare_parameter("calib_mode", false);
     RCLCPP_INFO_STREAM(this->get_logger(), "calib_mode_: " << this->calib_mode_);
 
@@ -258,20 +286,6 @@ void XimeaROSCam::initStorage() {
         this->save_trigger_ = false;
     }
 
-    // directory that holds video stream images
-    if (this->save_disk_) {
-        fs::path img_stream_dir = main_dir / (this->cam_name_ + "/stream/");
-        this->bin_path_ = img_stream_dir.string();
-        if (!fs::create_directories(img_stream_dir))
-        {
-            // failed to create directory, exit ROS and explain.
-            RCLCPP_ERROR_STREAM(this->get_logger(), "ERROR: unable to create directory: " << this->bin_path_);
-            RCLCPP_ERROR_STREAM(this->get_logger(), "Please make sure that the image_directory "
-                         << "parameter is set to a folder with the proper "
-                         << "permissions in the config file.");
-            rclcpp::shutdown();
-        }
-    }
 
     RCLCPP_INFO(this->get_logger(), "Image Storage Loaded.");
 }
@@ -309,26 +323,8 @@ void XimeaROSCam::initCam() {
     this->age_max_ = this->declare_parameter("data_age_max", 0.1);
     RCLCPP_INFO_STREAM(this->get_logger(), "data_age_max: " << this->age_max_);
 
-    //      -- apply compressed image parameters (from image_transport) --
-    this->cam_compressed_format_ = this->declare_parameter("image_transport_compressed_format", std::string("INVALID"));
-    RCLCPP_INFO_STREAM(this->get_logger(), "image_transport_compressed_format: "
-        << this->cam_compressed_format_);
-    this->cam_compressed_jpeg_quality_ = this->declare_parameter("image_transport_compressed_jpeg_quality", -1);
-    RCLCPP_INFO_STREAM(this->get_logger(), "image_transport_compressed_jpeg_quality: "
-        << this->cam_compressed_jpeg_quality_);
-    this->cam_compressed_png_level_ = this->declare_parameter("image_transport_compressed_png_level", -1);
-    RCLCPP_INFO_STREAM(this->get_logger(), "image_transport_compressed_png_level: "
-        << this->cam_compressed_png_level_);
-
     //      -- apply image format parameters --
-    this->cam_format_ = this->declare_parameter("format", std::string("INVALID"));
-    RCLCPP_INFO_STREAM(this->get_logger(), "format: " << this->cam_format_);
-    this->cam_format_int_ = ImgFormatMap[this->cam_format_];
-    RCLCPP_INFO_STREAM(this->get_logger(), "format_int: " << this->cam_format_int_);
-    this->cam_bytesperpixel_ = BytesPerPixelMap[this->cam_format_];
-    RCLCPP_INFO_STREAM(this->get_logger(), "cam_bytesperpixel_: " << this->cam_bytesperpixel_);
-    this->cam_encoding_ = ImgEncodingMap[this->cam_format_];
-    RCLCPP_INFO_STREAM(this->get_logger(), "cam_encoding_: " << this->cam_encoding_);
+    this->declare_parameter("format", std::string{});
 
     //      -- apply bandwidth parameters --
     this->cam_num_in_bus_ = this->declare_parameter("num_cams_in_bus", -1);
@@ -393,12 +389,6 @@ void XimeaROSCam::initCam() {
     this->is_active_ = false;
     this->xi_h_ = NULL;
 
-    // Set compression parameters for image_transport
-    // Note: In ROS2, these are typically handled by image_transport directly
-    // this->set_parameter(rclcpp::Parameter("image_raw/compressed/format", this->cam_compressed_format_));
-    // this->set_parameter(rclcpp::Parameter("image_raw/compressed/jpeg_quality", this->cam_compressed_jpeg_quality_));
-    // this->set_parameter(rclcpp::Parameter("image_raw/compressed/png_level", this->cam_compressed_png_level_));
-
     // Setup image transport (publishing) and camera info topics
     image_transport::ImageTransport it(this->shared_from_this());
     this->cam_pub_ = it.advertise("image_raw", 1);
@@ -442,9 +432,27 @@ void XimeaROSCam::openCam() {
     // set the ximea debug level
     set(XI_PRM_DEBUG_LEVEL, XI_DL_FATAL);//XI_DL_ERROR);//XI_DL_WARNING);//
 
-    //      -- Set image format --
-    if(set(XI_PRM_IMAGE_DATA_FORMAT, this->cam_format_int_))
-        RCLCPP_WARN_STREAM(this->get_logger(), "Failed to set image format.");
+    // wrangle the image format
+    auto format_name = get_parameter("format").as_string();
+    if(auto it = PixelFormatMap.find(format_name); it != PixelFormatMap.end() && 
+            set(XI_PRM_IMAGE_DATA_FORMAT, it->second) == XI_OK) 
+    {
+        this->pixel_format_ = it->second;
+        RCLCPP_INFO_STREAM(this->get_logger(), "Setting image format to: \"" << format_name << "\" (" <<
+                this->pixel_format_ << ")");
+    }
+    else 
+    {
+        get(XI_PRM_IMAGE_DATA_FORMAT, this->pixel_format_);
+        RCLCPP_WARN_STREAM(this->get_logger(), "\"" << format_name << 
+                "\" not supported. Using current format: " << this->pixel_format_);
+    }
+
+    this->image_encoding_ = getImageEncoding();
+    RCLCPP_INFO_STREAM(this->get_logger(), "image encoding: " << this->image_encoding_);
+
+    //get(XI_PRM_IMAGE_PAYLOAD_SIZE, this->image_size_in_bytes_);
+    get(XI_PRM_IMAGE_DATA_BIT_DEPTH, this->image_bit_depth_);
 
     this->setWhiteBalance();
     this->setTrigger();
@@ -511,184 +519,154 @@ void XimeaROSCam::openDeviceCb() {
     }
     
 
-    if (xi_stat == XI_OK && this->xi_h_ != NULL) {  
+    if (xi_stat == XI_OK && this->xi_h_ != NULL) 
+    {  
         if(this->cam_serialno_.empty()) 
             get(XI_PRM_DEVICE_SN, this->cam_serialno_);
         // if(this->user_id_.empty())  
         //     get(XI_PRM_DEVICE_USER_ID, this->user_id_);  
         RCLCPP_INFO_STREAM(this->get_logger(), "Successfully opened camera. Serial number: "
                         << this->cam_serialno_);
-        this->xi_open_device_cb_->cancel(); // was using stop under ros1
+        this->xi_open_device_cb_->cancel(); 
 
         XimeaROSCam::openCam();
     }   
 }
 
 // Start aquiring data
-void XimeaROSCam::frameCaptureCb() {
-    // Init variables
-    XI_RETURN xi_stat;
-    XI_IMG xi_img;
-    char *img_buffer;
-    int img_buf_size;
-    rclcpp::Time timestamp;
+void XimeaROSCam::frameCaptureCb()
+{
+    if (!this->is_active_)
+        return;
+
+    XI_IMG xi_img = {};
     std::string time_str;
 
     xi_img.size = sizeof(XI_IMG);
     xi_img.bp = NULL;
     xi_img.bp_size = 0;
 
-    // Acquisition started
-    if (this->is_active_) {
-        // Acquire image
-        xi_stat = xiGetImage(this->xi_h_,
-                             this->cam_img_cap_timeout_,
-                             &xi_img);         
-        // Add timestamp
-        timestamp = iterpolateTimestamp(xi_img);
+    // Acquire image
+    XI_RETURN xi_stat = xiGetImage(this->xi_h_, this->cam_img_cap_timeout_, &xi_img);
+        
+    // Add timestamp
+    rclcpp::Time timestamp = iterpolateTimestamp(xi_img);
 
-        // Was the image retrieval successful?
-        if (xi_stat == XI_OK) {
-            RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+    // Was the image retrieval successful?
+    if (xi_stat == XI_OK) 
+    {   
+        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
                 "Capturing image from Ximea camera serial no: "
                 << this->cam_serialno_
                 << ". WxH: "
                 << xi_img.width
                 << " x "
                 << xi_img.height << ".");
-            // Setup image
-            img_buffer = reinterpret_cast<char *>(xi_img.bp);
-            img_buf_size = xi_img.width * xi_img.height
-                           * this->cam_bytesperpixel_;
 
-            // Correctly format time as a string
+        // Setup image
+        auto img_buffer = static_cast<char *>(xi_img.bp);
+
+        sensor_msgs::msg::Image img;
+        img.header.frame_id = cam_frameid_;
+        img.header.stamp = timestamp;
+        sensor_msgs::fillImage(img,
+                image_encoding_,
+                xi_img.height,
+                xi_img.width,
+                xi_img.width * (image_bit_depth_ / 8u) + xi_img.padding_x,
+                img_buffer);
+
+        // Publish image
+        cam_pub_.publish(img);
+
+        if (enable_diagnostics_) {
+            cam_pub_diag_->tick(timestamp);
+            //diag_updater.update(); // DISABLED WHILE UPGRADING TO ROS2
+        }
+
+        // Publish camera calibration info if camera info is loaded
+        if (cam_info_loaded_) 
+        {
+            sensor_msgs::msg::CameraInfo cam_info = cam_info_manager_->getCameraInfo();
+                // reset frame id
+            cam_info.header.frame_id = cam_frameid_;
+            cam_info.header.stamp = timestamp;
+            cam_info_pub_->publish(cam_info);
+        }
+
+        // Publish image counter
+        // Note that header.seq does this, but it is depreciated and
+        // will be removed in ROS 2. Therefore here we did this instead.
+        std_msgs::msg::UInt32 icount;
+        img_count_++;                 // increment
+        icount.data = img_count_;
+        cam_img_counter_pub_->publish(icount);
+        
+
+        // Compress and save images if triggered and in calibration mode
+        if (this->save_trigger_ && this->calib_mode_) 
+        {
+            this->save_trigger_ = false;
+
             time_str = this->formatTimeString(timestamp);
 
-            // Save image as binary file
-            if (this->save_disk_) {
-                std::string bin_path = this->bin_path_ + time_str + "_" +
-                                       this->cam_name_ + ".bin";
+            if (this->image_directory_ != std::string("NO_PATH")) {
+                std::string png_path = this->png_path_ + time_str + "_" +
+                                        this->cam_name_ + ".png";
 
-                if (this->saveToDisk(img_buffer, img_buf_size, bin_path)) {
-                    RCLCPP_INFO_STREAM(this->get_logger(), "Saved image to: " << bin_path);
+                if (this->saveOnTrigger(img_buffer,
+                                        xi_img.height,
+                                        xi_img.width,
+                                        png_path)) {
+                    RCLCPP_INFO_STREAM(this->get_logger(), "Saved image to: " << png_path);
                 }
                 else {
-                    RCLCPP_INFO_STREAM(this->get_logger(), "Failed to save image: " << bin_path);
+                    RCLCPP_INFO_STREAM(this->get_logger(), "Failed to save image: " << png_path);
                 }
             }
-            // Publish as ROS message
             else {
-                sensor_msgs::msg::Image img;
-                // Populate ROS message
-                sensor_msgs::fillImage(img,
-                                       cam_encoding_,
-                                       xi_img.height,
-                                       xi_img.width,
-                                       xi_img.width * cam_bytesperpixel_,
-                                       img_buffer);
-                img.header.frame_id = cam_frameid_;
-                img.header.stamp = timestamp;
-
-                // Publish image
-                cam_pub_.publish(img);
-                if (enable_diagnostics_) {
-                    cam_pub_diag_->tick(timestamp);
-                    //diag_updater.update(); // DISABLED WHILE UPGRADING TO ROS2
-                }
-
-                // Publish camera calibration info if camera info is loaded
-                if (cam_info_loaded_) {
-                    sensor_msgs::msg::CameraInfo cam_info = cam_info_manager_->getCameraInfo();
-                        // reset frame id
-                    cam_info.header.frame_id = cam_frameid_;
-                    cam_info.header.stamp = timestamp;
-                    cam_info_pub_->publish(cam_info);
-                }
-
-                // Publish image counter
-                // Note that header.seq does this, but it is depreciated and
-                // will be removed in ROS 2. Therefore here we did this instead.
-                std_msgs::msg::UInt32 icount;
-                img_count_++;                 // increment
-                icount.data = img_count_;
-                cam_img_counter_pub_->publish(icount);
-            }
-
-            // Compress and save images if triggered and in calibration mode
-            if (this->save_trigger_ && this->calib_mode_) {
-                this->save_trigger_ = false;
-
-                time_str = this->formatTimeString(timestamp);
-
-                if (this->image_directory_ != std::string("NO_PATH")) {
-                    std::string png_path = this->png_path_ + time_str + "_" +
-                                           this->cam_name_ + ".png";
-
-                    if (this->saveOnTrigger(img_buffer,
-                                            xi_img.height,
-                                            xi_img.width,
-                                            png_path)) {
-                        RCLCPP_INFO_STREAM(this->get_logger(), "Saved image to: " << png_path);
-                    }
-                    else {
-                        RCLCPP_INFO_STREAM(this->get_logger(), "Failed to save image: " << png_path);
-                    }
-                }
-                else {
-                    RCLCPP_INFO_STREAM(this->get_logger(), "Directory path not set!");
-                }
+                RCLCPP_INFO_STREAM(this->get_logger(), "Directory path not set!");
             }
         }
-        else {
-
-        }
-
-        // If active, publish xiGetImage info to ROS message
-        if(this->publish_xi_image_info_) {
-            ximea_camera_interfaces::msg::XiImageInfo xiImageInfoMsg;
-            xiImageInfoMsg.header.frame_id = this->cam_frameid_;
-            xiImageInfoMsg.header.stamp = timestamp;
-            xiImageInfoMsg.size = xi_img.size;
-            xiImageInfoMsg.bp_size = xi_img.bp_size;
-            xiImageInfoMsg.frm = xi_img.frm;
-            xiImageInfoMsg.width = xi_img.width;
-            xiImageInfoMsg.height = xi_img.height;
-            xiImageInfoMsg.nframe = xi_img.nframe;
-            xiImageInfoMsg.ts_sec = xi_img.tsSec;
-            xiImageInfoMsg.ts_usec = xi_img.tsUSec;
-            xiImageInfoMsg.gpi_level = xi_img.GPI_level;
-            xiImageInfoMsg.black_level = xi_img.black_level;
-            xiImageInfoMsg.padding_x = xi_img.padding_x;
-            xiImageInfoMsg.absolute_offset_x = xi_img.AbsoluteOffsetX;
-            xiImageInfoMsg.absolute_offset_y = xi_img.AbsoluteOffsetY;
-            xiImageInfoMsg.exposure_time_us = xi_img.exposure_time_us;
-            xiImageInfoMsg.gain_db = xi_img.gain_db;
-            xiImageInfoMsg.acq_nframe = xi_img.acq_nframe;
-            xiImageInfoMsg.image_user_data = xi_img.image_user_data;
-            // xiGetImageMsg.exposure_sub_times_us = (unsigned int) xi_img.exposure_sub_times_us;
-            this->cam_xi_image_info_pub_->publish(xiImageInfoMsg);
-        }
     }
+    else 
+    {
+        RCLCPP_WARN_STREAM(this->get_logger(), "xiGetImage failed with error: " << xi_stat);
+    }
+    
 
-    // To avoid warnings
-    (void)xi_stat;
+    // If active, publish xiGetImage info to ROS message
+    if(this->publish_xi_image_info_) 
+    {
+        ximea_camera_interfaces::msg::XiImageInfo xiImageInfoMsg;
+        xiImageInfoMsg.header.frame_id = this->cam_frameid_;
+        xiImageInfoMsg.header.stamp = timestamp;
+        xiImageInfoMsg.size = xi_img.size;
+        xiImageInfoMsg.bp_size = xi_img.bp_size;
+        xiImageInfoMsg.frm = xi_img.frm;
+        xiImageInfoMsg.width = xi_img.width;
+        xiImageInfoMsg.height = xi_img.height;
+        xiImageInfoMsg.nframe = xi_img.nframe;
+        xiImageInfoMsg.ts_sec = xi_img.tsSec;
+        xiImageInfoMsg.ts_usec = xi_img.tsUSec;
+        xiImageInfoMsg.gpi_level = xi_img.GPI_level;
+        xiImageInfoMsg.black_level = xi_img.black_level;
+        xiImageInfoMsg.padding_x = xi_img.padding_x;
+        xiImageInfoMsg.absolute_offset_x = xi_img.AbsoluteOffsetX;
+        xiImageInfoMsg.absolute_offset_y = xi_img.AbsoluteOffsetY;
+        xiImageInfoMsg.exposure_time_us = xi_img.exposure_time_us;
+        xiImageInfoMsg.gain_db = xi_img.gain_db;
+        xiImageInfoMsg.acq_nframe = xi_img.acq_nframe;
+        xiImageInfoMsg.image_user_data = xi_img.image_user_data;
+        // xiGetImageMsg.exposure_sub_times_us = (unsigned int) xi_img.exposure_sub_times_us;
+        this->cam_xi_image_info_pub_->publish(xiImageInfoMsg);
+    }
+    
+
+    // // To avoid warnings
+    // (void)xi_stat;
 }
 
-// Directly write image data to the disk as a binary file
-bool XimeaROSCam::saveToDisk(char *img_buffer,
-                                     int img_size,
-                                     std::string filename) {
-    std::fstream output_file(filename,
-                             std::fstream::out | std::fstream::binary);
-
-    output_file.write(img_buffer, img_size);
-    output_file.close();
-
-    if (!output_file) {
-        return false;
-    }
-    return true;
-}
 
 // Save images on trigger with PNG compression
 bool XimeaROSCam::saveOnTrigger(char *img_buffer,

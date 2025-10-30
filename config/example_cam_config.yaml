@@ -24,11 +24,6 @@ pub_frequency_tolerance: 1.0
 # Camera Configuration Parameters Go Here!
 ####################
 
-# image_transport compressed image parameters
-image_transport_compressed_format: "png"
-image_transport_compressed_jpeg_quality: 100
-image_transport_compressed_png_level: 5
-
 # colour format
 format: "XI_RGB24"
 

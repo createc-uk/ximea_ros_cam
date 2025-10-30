@@ -79,9 +79,8 @@ private:
     // Camera params and Functions
     void initCam();
     void openCam();
-    static std::map<std::string, int> ImgFormatMap;
-    static std::map<std::string, int> BytesPerPixelMap;
-    static std::map<std::string, std::string> ImgEncodingMap;
+    static std::map<std::string, int> PixelFormatMap;
+    std::string_view getImageEncoding();
 
     // // Get camera lists
     // std::vector<std::string> getCamConfigFiles(std::string cam_list);
@@ -98,16 +97,12 @@ private:
     rclcpp::Publisher<ximea_camera_interfaces::msg::XiImageInfo>::SharedPtr cam_xi_image_info_pub_; // xiGetImage info publisher handle
     // image_transport::ImageTransport cam_it_; // Image transport handle
     image_transport::Publisher cam_pub_;     // Image publisher handle
-    // compressed image params
-    std::string cam_compressed_format_ = "png";      // "png" (lossless) or "jpeg"
-    int cam_compressed_jpeg_quality_ = 95;        // 1-100 (1 = min quality)
-    int cam_compressed_png_level_ = 9;           // 1-9 (9 = max compression)
     // camera
     std::string cam_name_ = "camera";        // Main topic name for cam
-    std::string cam_format_;                 // Camera image format
-    int cam_format_int_;                     // Camera image format int val
-    std::string cam_encoding_;               // Camera image encoding
-    int cam_bytesperpixel_;                  // Camera image bytes per pixel
+    int pixel_format_ = -1;                  // Camera image format int val
+    std::string image_encoding_ = {};        // Camera image encoding
+    //int image_size_in_bytes_ = {};           // Camera image size in bytes
+    int image_bit_depth_ = {};               // Camera image bit depth
     std::string cam_serialno_;               // Camera serial no
     std::string cam_user_id_;
     std::string cam_frameid_;
@@ -172,10 +167,8 @@ private:
     rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr trigger_sub_;
     void triggerCb(const std_msgs::msg::Empty::SharedPtr msg);
     std::string formatTimeString(rclcpp::Time timestamp);
-    bool saveToDisk(char *img_buffer, int img_size, std::string filename);
     bool saveOnTrigger( char *img_buffer, int img_h, int img_w, std::string filename);
     bool save_trigger_;
-    bool save_disk_;
     bool calib_mode_;
     std::string image_directory_;
     std::string png_path_;
