@@ -555,7 +555,7 @@ void XimeaROSCam::frameCaptureCb()
     // Was the image retrieval successful?
     if (xi_stat == XI_OK) 
     {   
-        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+        RCLCPP_DEBUG_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
                 "Capturing image from Ximea camera serial no: "
                 << this->cam_serialno_
                 << ". WxH: "
